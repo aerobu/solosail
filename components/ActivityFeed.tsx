@@ -3,15 +3,15 @@
 import { useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import type { ActivityLogEntry, AgentName } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
-const AGENT_BADGE: Record<AgentName, string> = {
-  orchestrator:    "bg-indigo-100 text-indigo-700",
-  deal_signal:     "bg-blue-100 text-blue-700",
-  firm_profile:    "bg-emerald-100 text-emerald-700",
-  contact_intel:   "bg-orange-100 text-orange-700",
-  fit_scorer:      "bg-amber-100 text-amber-700",
-  pitch_generator: "bg-pink-100 text-pink-700",
+// ── Agent badge styles (dark-optimised) ─────────────────────────
+const AGENT_BADGE: Record<AgentName, { bg: string; color: string }> = {
+  orchestrator:    { bg: "rgba(99,102,241,0.15)",  color: "#818cf8" },
+  deal_signal:     { bg: "rgba(59,130,246,0.15)",  color: "#60a5fa" },
+  firm_profile:    { bg: "rgba(16,185,129,0.15)",  color: "#34d399" },
+  contact_intel:   { bg: "rgba(249,115,22,0.15)",  color: "#fb923c" },
+  fit_scorer:      { bg: "rgba(245,158,11,0.15)",  color: "#fbbf24" },
+  pitch_generator: { bg: "rgba(236,72,153,0.15)",  color: "#f472b6" },
 };
 
 const AGENT_DISPLAY_NAME: Record<AgentName, string> = {
@@ -23,23 +23,17 @@ const AGENT_DISPLAY_NAME: Record<AgentName, string> = {
   pitch_generator: "Pitch Generator",
 };
 
+// ── Level left-border colours ────────────────────────────────────
 const LEVEL_BORDER: Record<ActivityLogEntry["level"], string> = {
-  info:    "border-slate-600",
-  success: "border-green-400",
-  warning: "border-amber-400",
-  error:   "border-red-400",
-};
-
-const LEVEL_DOT: Record<ActivityLogEntry["level"], string> = {
-  info:    "bg-slate-500",
-  success: "bg-green-400",
-  warning: "bg-amber-400",
-  error:   "bg-red-400",
+  info:    "var(--accent-blue)",
+  success: "var(--accent-green)",
+  warning: "var(--accent-amber)",
+  error:   "var(--accent-red)",
 };
 
 function formatRelativeTime(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return `${diff}s ago`;
+  if (diff < 60)   return `${diff}s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   return `${Math.floor(diff / 3600)}h ago`;
 }
@@ -58,42 +52,60 @@ export function ActivityFeed({ entries, running }: Props) {
 
   if (entries.length === 0 && !running) {
     return (
-      <div className="flex items-center justify-center h-24 text-slate-500 text-sm">
-        Activity will appear here when a run starts
+      <div
+        className="flex items-center justify-center h-24 font-mono text-xs"
+        style={{ color: "var(--text-muted)" }}
+      >
+        Awaiting run start…
       </div>
     );
   }
 
   return (
-    <div className="space-y-1.5">
-      {entries.map((entry, i) => (
-        <div
-          key={i}
-          className={cn(
-            "flex gap-2.5 px-3 py-2 rounded bg-slate-900 border-l-2",
-            LEVEL_BORDER[entry.level]
-          )}
-        >
-          <div className="flex-shrink-0 pt-1.5">
-            <span className={cn("inline-block w-1.5 h-1.5 rounded-full", LEVEL_DOT[entry.level])} />
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-              <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded", AGENT_BADGE[entry.agent])}>
-                {AGENT_DISPLAY_NAME[entry.agent]}
-              </span>
-              <span className="text-xs text-slate-500">{formatRelativeTime(entry.timestamp)}</span>
+    <div className="space-y-1">
+      {entries.map((entry, i) => {
+        const badge = AGENT_BADGE[entry.agent];
+        return (
+          <div
+            key={i}
+            className="animate-fade-up flex gap-2.5 px-3 py-2 rounded"
+            style={{
+              borderLeft: `2px solid ${LEVEL_BORDER[entry.level]}`,
+            }}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                <span
+                  className="font-mono text-[10px] font-medium px-1.5 py-0.5 rounded"
+                  style={{ backgroundColor: badge.bg, color: badge.color }}
+                >
+                  {AGENT_DISPLAY_NAME[entry.agent]}
+                </span>
+                <span
+                  className="font-mono text-[10px]"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {formatRelativeTime(entry.timestamp)}
+                </span>
+              </div>
+              <p
+                className="text-xs leading-snug break-words"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                {entry.message}
+              </p>
             </div>
-            <p className="text-xs text-slate-300 leading-snug break-words">{entry.message}</p>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {running && (
-        <div className="flex items-center gap-2 px-3 py-2 text-slate-500 text-xs">
-          <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
-          <span>agents working</span>
+        <div
+          className="flex items-center gap-2 px-3 py-2 font-mono text-xs"
+          style={{ color: "var(--text-muted)" }}
+        >
+          <Loader2 className="w-3 h-3 animate-spin" style={{ color: "var(--accent-blue)" }} />
+          processing…
         </div>
       )}
 

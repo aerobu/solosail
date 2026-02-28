@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Radar, Search, LayoutGrid } from "lucide-react";
+import { Radar, Search, LayoutGrid, ArrowRight, Loader2 } from "lucide-react";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { IntelCard } from "@/components/IntelCard";
 import type { ActivityLogEntry, ResearchState } from "@/lib/types";
@@ -20,7 +20,6 @@ export default function Dashboard() {
   const [error, setError]             = useState<string | null>(null);
   const esRef                         = useRef<EventSource | null>(null);
 
-  // Cleanup on unmount
   useEffect(() => () => { esRef.current?.close(); }, []);
 
   async function startRun(runQuery: string, runMode: Mode = mode) {
@@ -86,28 +85,48 @@ export default function Dashboard() {
 
   const placeholder =
     mode === "deep_dive"
-      ? "PE firm name — e.g. Riverside Company"
+      ? "Enter a PE firm name — e.g. Riverside Company, Genstar Capital..."
       : "Describe what to scan for — e.g. PE firms acquiring industrial manufacturers 2024";
 
   const hasActivity = log.length > 0 || finalState !== null;
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen" style={{ backgroundColor: "var(--bg-primary)" }}>
 
-      {/* ── Header ─────────────────────────────────────────────────── */}
-      <header className="bg-slate-900 px-6 py-4 border-b border-indigo-500/20">
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <header
+        className="header-grid px-6 py-5 stagger-1"
+        style={{
+          backgroundColor: "var(--bg-surface)",
+          borderBottom: "1px solid var(--accent-blue)",
+        }}
+      >
         <div className="max-w-screen-xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="font-bold text-xl tracking-tight">
-              <span className="text-white">SoloSail</span>
-              <span className="text-indigo-400">.ai</span>
-            </span>
-            <span className="hidden sm:block text-slate-500 text-sm">Procurement Intelligence</span>
+          <div>
+            <div className="flex items-baseline gap-0.5">
+              <span className="font-serif text-2xl" style={{ color: "var(--text-primary)" }}>
+                SoloSail
+              </span>
+              <span className="font-serif text-2xl" style={{ color: "var(--accent-blue)" }}>
+                .ai
+              </span>
+            </div>
+            <div
+              className="font-mono text-xs mt-0.5 flex items-center"
+              style={{ color: "var(--text-muted)" }}
+            >
+              Procurement Intelligence
+              <span className="animate-blink ml-0.5">_</span>
+            </div>
           </div>
+
           {running && (
-            <div className="flex items-center gap-2 text-slate-300 text-sm">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              Running…
+            <div className="flex items-center gap-2 font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: "var(--accent-green)" }} />
+                <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: "var(--accent-green)" }} />
+              </span>
+              RUNNING
             </div>
           )}
         </div>
@@ -115,38 +134,49 @@ export default function Dashboard() {
 
       <main className="max-w-screen-xl mx-auto px-6 py-6">
 
-        {/* ── Input Form ─────────────────────────────────────────────── */}
-        <div className="relative bg-white rounded-xl border border-slate-200 shadow-sm mb-6 overflow-hidden">
-          {/* Indigo top accent line */}
-          <div className="absolute top-0 inset-x-0 h-0.5 bg-indigo-500" />
-
+        {/* ── Input Form ────────────────────────────────────────── */}
+        <div
+          className="rounded-xl mb-6 stagger-2"
+          style={{
+            backgroundColor: "var(--bg-surface)",
+            border: "1px solid var(--border)",
+          }}
+        >
           <div className="p-6">
             <form onSubmit={handleSubmit}>
 
-              {/* Mode toggle */}
-              <div className="flex gap-1 p-1 bg-slate-100 rounded-lg w-fit mb-3">
+              {/* Mode toggle — borderless tabs */}
+              <div
+                className="flex gap-6 mb-5"
+                style={{ borderBottom: "1px solid var(--border)" }}
+              >
                 {(["deep_dive", "landscape_scan"] as const).map((m) => (
                   <button
                     key={m}
                     type="button"
                     onClick={() => setMode(m)}
-                    className={cn(
-                      "flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all",
-                      mode === m
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-500 hover:text-slate-700"
-                    )}
+                    className="pb-3 font-mono text-xs font-medium uppercase tracking-wider transition-colors relative"
+                    style={{ color: mode === m ? "var(--text-primary)" : "var(--text-muted)" }}
                   >
-                    {m === "deep_dive" ? (
-                      <><Search className="w-3.5 h-3.5" /> Deep Dive</>
-                    ) : (
-                      <><LayoutGrid className="w-3.5 h-3.5" /> Landscape Scan</>
-                    )}
+                    <span className="flex items-center gap-1.5">
+                      {m === "deep_dive"
+                        ? <><Search className="w-3 h-3" /> Deep Dive</>
+                        : <><LayoutGrid className="w-3 h-3" /> Landscape Scan</>
+                      }
+                    </span>
+                    {/* Sliding underline */}
+                    <span
+                      className="absolute bottom-0 left-0 right-0 h-0.5 transition-transform duration-200 origin-left"
+                      style={{
+                        backgroundColor: "var(--accent-blue)",
+                        transform: mode === m ? "scaleX(1)" : "scaleX(0)",
+                      }}
+                    />
                   </button>
                 ))}
               </div>
 
-              <p className="text-xs text-slate-400 mb-3">
+              <p className="font-mono text-xs mb-4" style={{ color: "var(--text-muted)" }}>
                 {mode === "deep_dive"
                   ? "Full research + pitch package for one specific PE firm."
                   : "Scan for 5–8 PE firms matching your criteria."}
@@ -160,66 +190,121 @@ export default function Dashboard() {
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={placeholder}
                   disabled={running}
-                  className="flex-1 px-4 py-3 rounded-lg border border-slate-200 text-base bg-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 disabled:opacity-50"
+                  className="flex-1 px-4 py-3 rounded-lg text-base font-sans transition-colors disabled:opacity-50 outline-none"
+                  style={{
+                    backgroundColor: "var(--bg-elevated)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-primary)",
+                  }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-bright)"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
                 />
                 <button
                   type="submit"
                   disabled={running || !query.trim()}
                   className={cn(
-                    "px-6 py-3 rounded-lg text-sm font-semibold whitespace-nowrap transition-all active:scale-95",
+                    "flex items-center gap-2 px-6 py-3 rounded-lg font-mono text-sm font-medium whitespace-nowrap transition-all",
                     running || !query.trim()
-                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                      : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
+                      ? "cursor-not-allowed"
+                      : "active:scale-[0.98]"
                   )}
+                  style={
+                    running || !query.trim()
+                      ? { backgroundColor: "var(--bg-elevated)", color: "var(--text-muted)" }
+                      : { backgroundColor: "var(--accent-blue)", color: "#fff" }
+                  }
                 >
-                  {running ? "Researching…" : "Run Research"}
+                  {running ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Researching…</>
+                  ) : (
+                    <><ArrowRight className="w-4 h-4" /> Run Research</>
+                  )}
                 </button>
               </div>
             </form>
 
             {error && (
-              <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <div
+                className="mt-4 font-mono text-xs px-4 py-3 rounded-lg"
+                style={{
+                  backgroundColor: "rgba(239,68,68,0.08)",
+                  border: "1px solid rgba(239,68,68,0.3)",
+                  color: "var(--accent-red)",
+                }}
+              >
                 {error}
               </div>
             )}
           </div>
         </div>
 
-        {/* ── Two-column layout (active run or result) ──────────────── */}
+        {/* ── Two-column layout ─────────────────────────────────── */}
         {hasActivity ? (
-          <div className="flex gap-6 items-start transition-all duration-300 ease-out">
+          <div className="flex gap-6 items-start stagger-3">
 
             {/* Left — Activity Feed */}
             <div className="w-[400px] flex-shrink-0 sticky top-6">
-              <div className="bg-slate-950 rounded-xl overflow-hidden shadow-lg">
-                <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-300">Research Activity</span>
-                  <span className="text-xs text-slate-500">{log.length} event{log.length !== 1 ? "s" : ""}</span>
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{
+                  backgroundColor: "var(--bg-surface)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                {/* Panel header */}
+                <div
+                  className="px-4 py-3 flex items-center justify-between"
+                  style={{ borderBottom: "1px solid var(--border)" }}
+                >
+                  <div className="flex items-center gap-2.5">
+                    {running && (
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: "var(--accent-green)" }} />
+                        <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: "var(--accent-green)" }} />
+                      </span>
+                    )}
+                    <span
+                      className="font-mono text-xs font-medium uppercase tracking-[0.12em]"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      Research Activity
+                    </span>
+                  </div>
+                  <span className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                    {log.length} event{log.length !== 1 ? "s" : ""}
+                  </span>
                 </div>
-                <div className="p-3 max-h-[calc(100vh-220px)] overflow-y-auto">
+
+                <div className="p-3 max-h-[calc(100vh-220px)] overflow-y-auto dark-scrollbar">
                   <ActivityFeed entries={log} running={running} />
                 </div>
               </div>
             </div>
 
-            {/* Right — Intel Card or skeleton placeholder */}
+            {/* Right — Intel Card or skeleton */}
             <div className="flex-1 min-w-0">
               {finalState ? (
                 <IntelCard state={finalState} />
               ) : (
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+                <div
+                  className="rounded-xl p-8"
+                  style={{
+                    backgroundColor: "var(--bg-surface)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
                   <div className="animate-pulse space-y-4">
-                    <div className="h-8 bg-slate-200 rounded-lg w-2/3" />
-                    <div className="h-4 bg-slate-100 rounded w-1/4" />
-                    <div className="h-4 bg-slate-100 rounded w-1/3" />
-                    <div className="border-t border-slate-100 pt-4 space-y-3">
-                      <div className="h-3 bg-slate-100 rounded w-full" />
-                      <div className="h-3 bg-slate-100 rounded w-5/6" />
-                      <div className="h-3 bg-slate-100 rounded w-4/6" />
+                    <div className="h-12 rounded-lg w-2/3" style={{ backgroundColor: "var(--bg-elevated)" }} />
+                    <div className="h-4 rounded w-1/4" style={{ backgroundColor: "var(--bg-elevated)" }} />
+                    <div className="h-4 rounded w-1/3" style={{ backgroundColor: "var(--bg-elevated)" }} />
+                    <div className="pt-4 space-y-3" style={{ borderTop: "1px solid var(--border)" }}>
+                      <div className="h-3 rounded w-full" style={{ backgroundColor: "var(--bg-elevated)" }} />
+                      <div className="h-3 rounded w-5/6" style={{ backgroundColor: "var(--bg-elevated)" }} />
+                      <div className="h-3 rounded w-4/6" style={{ backgroundColor: "var(--bg-elevated)" }} />
                     </div>
-                    <div className="border-t border-slate-100 pt-4 space-y-3">
-                      <div className="h-3 bg-slate-100 rounded w-full" />
-                      <div className="h-3 bg-slate-100 rounded w-3/4" />
+                    <div className="pt-4 space-y-3" style={{ borderTop: "1px solid var(--border)" }}>
+                      <div className="h-3 rounded w-full" style={{ backgroundColor: "var(--bg-elevated)" }} />
+                      <div className="h-3 rounded w-3/4" style={{ backgroundColor: "var(--bg-elevated)" }} />
                     </div>
                   </div>
                 </div>
@@ -228,13 +313,22 @@ export default function Dashboard() {
           </div>
 
         ) : (
-          /* ── Empty state ─────────────────────────────────────────── */
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-14 text-center">
-            <Radar className="w-12 h-12 text-indigo-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-slate-700 mb-2">
+          /* ── Empty state ────────────────────────────────────── */
+          <div
+            className="rounded-xl p-14 text-center stagger-3"
+            style={{
+              backgroundColor: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <Radar
+              className="w-12 h-12 mx-auto mb-5 opacity-50"
+              style={{ color: "var(--accent-blue)" }}
+            />
+            <h3 className="font-serif text-3xl mb-3" style={{ color: "var(--text-primary)" }}>
               Start your research
             </h3>
-            <p className="text-slate-400 text-sm max-w-sm mx-auto mb-6">
+            <p className="font-mono text-sm max-w-sm mx-auto mb-8" style={{ color: "var(--text-muted)" }}>
               Deep Dive into a specific firm or run a Landscape Scan to find new targets.
             </p>
             <div className="flex flex-wrap gap-2 justify-center">
@@ -243,7 +337,20 @@ export default function Dashboard() {
                   key={chip}
                   type="button"
                   onClick={() => handleChipClick(chip)}
-                  className="px-4 py-1.5 rounded-full text-sm bg-slate-100 text-slate-600 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 transition-all"
+                  className="font-mono text-xs px-4 py-2 rounded-lg transition-all"
+                  style={{
+                    backgroundColor: "var(--bg-elevated)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-secondary)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "var(--border-bright)";
+                    e.currentTarget.style.color = "var(--text-primary)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "var(--border)";
+                    e.currentTarget.style.color = "var(--text-secondary)";
+                  }}
                 >
                   {chip}
                 </button>
