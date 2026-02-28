@@ -34,3 +34,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code local files
+.claude/
+
+# windows zone identifier files
+*.Zone.Identifier
+
+# demo cache — large JSON files, do not commit
+# (populated at runtime by the cache-priming script)
+lib/demo-cache/*.json
+
+# scripts are dev tools only
+scripts/
