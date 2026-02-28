@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { Loader2 } from "lucide-react";
 import type { ActivityLogEntry, AgentName } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -13,27 +14,34 @@ const AGENT_BADGE: Record<AgentName, string> = {
   pitch_generator: "bg-pink-100 text-pink-700",
 };
 
+const AGENT_DISPLAY_NAME: Record<AgentName, string> = {
+  orchestrator:    "Orchestrator",
+  deal_signal:     "Deal Signal",
+  firm_profile:    "Firm Profile",
+  contact_intel:   "Contact Intel",
+  fit_scorer:      "Fit Scorer",
+  pitch_generator: "Pitch Generator",
+};
+
 const LEVEL_BORDER: Record<ActivityLogEntry["level"], string> = {
-  info:    "border-slate-200",
+  info:    "border-slate-600",
   success: "border-green-400",
   warning: "border-amber-400",
   error:   "border-red-400",
 };
 
 const LEVEL_DOT: Record<ActivityLogEntry["level"], string> = {
-  info:    "bg-slate-400",
-  success: "bg-green-500",
+  info:    "bg-slate-500",
+  success: "bg-green-400",
   warning: "bg-amber-400",
-  error:   "bg-red-500",
+  error:   "bg-red-400",
 };
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
+function formatRelativeTime(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  return `${Math.floor(diff / 3600)}h ago`;
 }
 
 interface Props {
@@ -50,7 +58,7 @@ export function ActivityFeed({ entries, running }: Props) {
 
   if (entries.length === 0 && !running) {
     return (
-      <div className="flex items-center justify-center h-24 text-slate-400 text-sm">
+      <div className="flex items-center justify-center h-24 text-slate-500 text-sm">
         Activity will appear here when a run starts
       </div>
     );
@@ -62,7 +70,7 @@ export function ActivityFeed({ entries, running }: Props) {
         <div
           key={i}
           className={cn(
-            "flex gap-2.5 px-3 py-2 rounded bg-white border-l-2",
+            "flex gap-2.5 px-3 py-2 rounded bg-slate-900 border-l-2",
             LEVEL_BORDER[entry.level]
           )}
         >
@@ -72,22 +80,20 @@ export function ActivityFeed({ entries, running }: Props) {
 
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-              <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded font-mono", AGENT_BADGE[entry.agent])}>
-                {entry.agent}
+              <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded", AGENT_BADGE[entry.agent])}>
+                {AGENT_DISPLAY_NAME[entry.agent]}
               </span>
-              <span className="text-xs text-slate-400">{formatTime(entry.timestamp)}</span>
+              <span className="text-xs text-slate-500">{formatRelativeTime(entry.timestamp)}</span>
             </div>
-            <p className="text-xs text-slate-700 leading-snug break-words">{entry.message}</p>
+            <p className="text-xs text-slate-300 leading-snug break-words">{entry.message}</p>
           </div>
         </div>
       ))}
 
       {running && (
-        <div className="flex items-center gap-1 px-3 py-2 text-slate-400 text-xs">
-          <span className="animate-bounce [animation-delay:0ms]">·</span>
-          <span className="animate-bounce [animation-delay:150ms]">·</span>
-          <span className="animate-bounce [animation-delay:300ms]">·</span>
-          <span className="ml-1.5">agents working</span>
+        <div className="flex items-center gap-2 px-3 py-2 text-slate-500 text-xs">
+          <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
+          <span>agents working</span>
         </div>
       )}
 

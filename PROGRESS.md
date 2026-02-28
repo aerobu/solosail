@@ -38,9 +38,9 @@ PDX Hacks & AI Collective · Anthropic-sponsored hackathon · Spec: `SoloSail_Pr
 ### UI Components
 | File | Status | Description |
 |---|---|---|
-| `/app/dashboard/page.tsx` | ✅ Complete | "use client". Mode toggle (Deep Dive / Landscape Scan), firm name input, EventSource lifecycle with cleanup on unmount and on new submissions. Two-column layout: 400px sticky ActivityFeed left, flex-1 IntelCard right. Empty state anchor illustration. Error display. |
-| `/components/ActivityFeed.tsx` | ✅ Complete | Append-only live agent log. Agent badge colors: orchestrator=indigo, deal_signal=blue, firm_profile=emerald, contact_intel=orange, fit_scorer=amber, pitch_generator=pink. Level border colors: info=slate, success=green, warning=amber, error=red. Auto-scroll via `useRef` + `useEffect`. Animated bouncing "·" dots while running. |
-| `/components/IntelCard.tsx` | ✅ Complete | Full output card for `ResearchState`. Sections: Firm Header (with large fit score badge in High=green/Medium=amber/Low=red), Deal Signals with source links, Firm Profile (operating partners + portfolio table), Primary Contact with initials avatar, Fit Assessment with objections, Pitch Package via PitchPanel. Graceful `low_fit` banner with reason. |
+| `/app/dashboard/page.tsx` | ✅ Complete (UI redesign applied) | "use client". Redesigned header (SoloSail/.ai brand lockup, indigo-400 TLD accent, indigo-500/20 bottom border). Indigo top-accent form card. Mode toggle with Lucide icons (Search/LayoutGrid). Larger input (py-3, text-base), active:scale-95 submit. Empty state: Radar icon + 3 demo chips (Riverside Company, Genstar Capital, Accel-KKR) that click-to-run. ActivityFeed container is now dark (bg-slate-950). Skeleton loading placeholder with animate-pulse. |
+| `/components/ActivityFeed.tsx` | ✅ Complete (UI redesign applied) | Dark terminal theme (bg-slate-900 entries on bg-slate-950 container). Human-readable agent display names (e.g. "Firm Profile" not "firm_profile"). Relative timestamps ("2s ago"). Loader2 spinner instead of bouncing dots. |
+| `/components/IntelCard.tsx` | ✅ Complete (UI redesign applied) | Firm header: 3px colored top accent bar matching fit score (green/amber/red), text-3xl font-black firm name, FIT badge with shadow-sm and "FIT" label. All other sections unchanged. |
 | `/components/PitchPanel.tsx` | ✅ Complete | Three tabs: Cold Email, Why Us Why Now, Talking Points. `CopyButton` component with `navigator.clipboard.writeText` and "Copied!" confirmation state. Uses lucide-react `Check` and `Copy` icons. |
 
 ### Config & Docs

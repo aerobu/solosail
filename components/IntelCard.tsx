@@ -6,6 +6,12 @@ import { cn } from "@/lib/utils";
 
 // ── Visual helpers ──────────────────────────────────────────────
 
+const FIT_ACCENT_BAR: Record<FitScore, string> = {
+  High:   "bg-green-500",
+  Medium: "bg-amber-500",
+  Low:    "bg-red-500",
+};
+
 const FIT_BIG: Record<FitScore, string> = {
   High:   "bg-green-500 text-white",
   Medium: "bg-amber-500 text-white",
@@ -77,10 +83,14 @@ export function IntelCard({ state }: Props) {
     <div className="space-y-4">
 
       {/* ── Firm Header ──────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        {displayScore && (
+          <div className={cn("h-[3px] w-full", FIT_ACCENT_BAR[displayScore])} />
+        )}
+        <div className="p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <h2 className="text-2xl font-bold text-slate-900 truncate">{firmName}</h2>
+            <h2 className="text-3xl font-black text-slate-900 truncate">{firmName}</h2>
 
             {firm_profile?.fund_size && (
               <p className="text-sm text-slate-500 mt-0.5">
@@ -105,11 +115,11 @@ export function IntelCard({ state }: Props) {
           {/* Fit score — large badge */}
           {displayScore && (
             <div className={cn(
-              "flex-shrink-0 px-4 py-2.5 rounded-xl font-bold text-center min-w-[90px]",
+              "flex-shrink-0 px-4 py-2.5 rounded-xl font-bold text-center min-w-[80px] shadow-sm",
               FIT_BIG[displayScore]
             )}>
               <div className="text-xs font-semibold uppercase tracking-wide opacity-80 mb-0.5">
-                Fit Score
+                FIT
               </div>
               <div className="text-xl">{displayScore}</div>
             </div>
@@ -122,6 +132,7 @@ export function IntelCard({ state }: Props) {
             <span className="font-semibold">Low Fit: </span>{error_message}
           </div>
         )}
+        </div>
       </div>
 
       {/* ── Deal Signals ──────────────────────────────────────────── */}
