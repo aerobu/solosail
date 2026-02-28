@@ -117,16 +117,15 @@ Given a user query (a specific PE firm name for Deep Dive mode, or search criter
 
 ### Deep Dive Mode (specific firm named):
 1. Optionally do one quick web_search to orient yourself if the firm is unfamiliar
-2. Dispatch run_firm_profile_agent for the named firm
-3. After profile returns: read_research_state. Evaluate sector focus.
+2. PARALLEL DISPATCH — call run_firm_profile_agent AND run_contact_intel_agent in a SINGLE turn by emitting both tool_use blocks at once. Do NOT split them into two separate turns. They execute in parallel threads and will both complete before you receive any results.
+3. After both return: read_research_state. Evaluate sector focus and contacts.
    - If clearly LOW FIT (pure software, no industrial exposure): call mark_low_fit immediately
-4. Dispatch run_contact_intel_agent for the same firm
-5. After contacts return: dispatch run_fit_scorer
-6. After scoring returns: read_research_state and evaluate fit_assessment.score
+4. Dispatch run_fit_scorer
+5. After scoring returns: read_research_state and evaluate fit_assessment.score
    - If Low: call mark_low_fit with the rationale from the fit assessment
    - If Medium or High: continue to pitch generation
-7. Dispatch run_pitch_generator with specific emphasis_points (see instructions below)
-8. When pitch returns: you are done — end your turn
+6. Dispatch run_pitch_generator with specific emphasis_points (see instructions below)
+7. When pitch returns: you are done — end your turn
 
 ### Landscape Scan Mode (criteria provided, no specific firm):
 1. Dispatch run_deal_signal_agent with the user's search criteria as search_focus
@@ -672,38 +671,41 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
           (b): b is ToolUseBlock => b.type === "tool_use"
         );
 
-        const toolResults: ToolResultBlockParam[] = [];
+        // Execute all tools in this turn in parallel so that
+        // run_firm_profile_agent and run_contact_intel_agent run concurrently
+        // when Claude emits both in a single turn (as instructed in the system prompt).
+        const toolResults: ToolResultBlockParam[] = await Promise.all(
+          toolBlocks.map(async (block) => {
+            let resultContent: string;
+            let isError = false;
 
-        for (const block of toolBlocks) {
-          let resultContent: string;
-          let isError = false;
+            try {
+              resultContent = await executeOrchestratorTool(
+                sessionId,
+                block.name,
+                block.input as Record<string, unknown>,
+                stopSignal
+              );
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              resultContent = JSON.stringify({ error: message });
+              isError = true;
+              pushActivityLog(
+                sessionId,
+                "orchestrator",
+                `Tool error (${block.name}): ${message}`,
+                "error"
+              );
+            }
 
-          try {
-            resultContent = await executeOrchestratorTool(
-              sessionId,
-              block.name,
-              block.input as Record<string, unknown>,
-              stopSignal
-            );
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            resultContent = JSON.stringify({ error: message });
-            isError = true;
-            pushActivityLog(
-              sessionId,
-              "orchestrator",
-              `Tool error (${block.name}): ${message}`,
-              "error"
-            );
-          }
-
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: block.id,
-            content: resultContent,
-            is_error: isError,
-          });
-        }
+            return {
+              type: "tool_result" as const,
+              tool_use_id: block.id,
+              content: resultContent,
+              is_error: isError,
+            };
+          })
+        );
 
         // If a tool (e.g., mark_low_fit) signalled stop, we still need to
         // send the tool results back to Claude for a clean final turn,

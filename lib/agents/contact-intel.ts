@@ -190,7 +190,7 @@ export async function runContactIntelAgent(
       STORE_FINDING_TOOL,
     ],
     toolExecutor: createToolExecutor(sessionId),
-    maxIterations: 14,
+    maxIterations: 3,
   });
 
   const { getState } = await import("@/lib/tools/research-state");

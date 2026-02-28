@@ -178,7 +178,7 @@ export async function runFirmProfileAgent(
       `Store your findings when complete.`,
     tools: [WEB_SEARCH_TOOL, FETCH_PAGE_TOOL, STORE_FINDING_TOOL],
     toolExecutor: createToolExecutor(sessionId),
-    maxIterations: 14,
+    maxIterations: 4,
   });
 
   const { getState } = await import("@/lib/tools/research-state");

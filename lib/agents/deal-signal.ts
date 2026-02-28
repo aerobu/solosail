@@ -151,7 +151,7 @@ export async function runDealSignalAgent(
       `then store your ranked findings. Aim for 5–8 high-quality signals.`,
     tools: [WEB_SEARCH_TOOL, FETCH_PAGE_TOOL, STORE_FINDING_TOOL],
     toolExecutor: createToolExecutor(sessionId),
-    maxIterations: 15,
+    maxIterations: 3,
   });
 
   const { getState } = await import("@/lib/tools/research-state");
