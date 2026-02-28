@@ -71,6 +71,7 @@ export function ActivityFeed({ entries, running }: Props) {
             className="animate-fade-up flex gap-2.5 px-3 py-2 rounded"
             style={{
               borderLeft: `2px solid ${LEVEL_BORDER[entry.level]}`,
+              paddingBottom: "10px",
             }}
           >
             <div className="flex-1 min-w-0">
@@ -89,8 +90,8 @@ export function ActivityFeed({ entries, running }: Props) {
                 </span>
               </div>
               <p
-                className="text-xs leading-snug break-words"
-                style={{ color: "var(--text-secondary)" }}
+                className="text-xs break-words"
+                style={{ lineHeight: 1.6, color: "var(--text-secondary)" }}
               >
                 {entry.message}
               </p>

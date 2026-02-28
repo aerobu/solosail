@@ -38,8 +38,8 @@ function SectionHeader({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-3 mb-5">
       <span
-        className="font-mono text-[10px] font-medium uppercase tracking-[0.15em] whitespace-nowrap"
-        style={{ color: "var(--accent-blue)" }}
+        className="font-mono font-medium uppercase whitespace-nowrap"
+        style={{ fontSize: "11px", letterSpacing: "0.2em", color: "var(--accent-blue)" }}
       >
         {title}
       </span>
@@ -150,7 +150,7 @@ export function IntelCard({ state }: Props) {
             <div className="flex-1 min-w-0">
               <h2
                 className="font-serif truncate leading-tight"
-                style={{ fontSize: "48px", color: "var(--text-primary)" }}
+                style={{ fontSize: "40px", color: "var(--text-primary)" }}
               >
                 {firmName}
               </h2>
