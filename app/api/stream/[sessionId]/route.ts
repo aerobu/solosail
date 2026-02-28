@@ -16,8 +16,9 @@ export async function GET(
   const { sessionId } = params;
   const encoder = new TextEncoder();
 
-  // `pollInterval` is captured by both `start` and `cancel` closures.
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  // Both intervals are captured by `start` and `cancel` closures.
+  let pollInterval:      ReturnType<typeof setInterval> | null = null;
+  let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
@@ -35,6 +36,13 @@ export async function GET(
         return;
       }
 
+      // Keep-alive: send a silent SSE comment every 15 seconds so routers and
+      // proxies with short idle-connection timeouts don't kill the stream while
+      // agents are working silently between log entries.
+      keepAliveInterval = setInterval(() => {
+        try { controller.enqueue(encoder.encode(": ping\n\n")); } catch { /* closed */ }
+      }, 15_000);
+
       let lastLogIndex = 0;
 
       pollInterval = setInterval(() => {
@@ -43,8 +51,8 @@ export async function GET(
 
           // Session was destroyed mid-run (shouldn't happen in POC, but be safe).
           if (!state) {
-            clearInterval(pollInterval!);
-            pollInterval = null;
+            clearInterval(pollInterval!);    pollInterval = null;
+            clearInterval(keepAliveInterval!); keepAliveInterval = null;
             try { controller.close(); } catch { /* already closed */ }
             return;
           }
@@ -68,27 +76,23 @@ export async function GET(
                 `event: complete\ndata: ${JSON.stringify(state)}\n\n`
               )
             );
-            clearInterval(pollInterval!);
-            pollInterval = null;
+            clearInterval(pollInterval!);    pollInterval = null;
+            clearInterval(keepAliveInterval!); keepAliveInterval = null;
             try { controller.close(); } catch { /* already closed */ }
           }
         } catch {
           // Defensive: if serialization or enqueue fails, close cleanly.
-          if (pollInterval) {
-            clearInterval(pollInterval);
-            pollInterval = null;
-          }
+          if (pollInterval)      { clearInterval(pollInterval);      pollInterval = null; }
+          if (keepAliveInterval) { clearInterval(keepAliveInterval); keepAliveInterval = null; }
           try { controller.close(); } catch { /* already closed */ }
         }
       }, 500);
     },
 
     cancel() {
-      // Client disconnected — stop polling.
-      if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-      }
+      // Client disconnected — stop polling and keep-alive.
+      if (pollInterval)      { clearInterval(pollInterval);      pollInterval = null; }
+      if (keepAliveInterval) { clearInterval(keepAliveInterval); keepAliveInterval = null; }
     },
   });
 
