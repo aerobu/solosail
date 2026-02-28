@@ -250,6 +250,39 @@ export function handleReadResearchState(
 }
 
 /**
+ * Replays a cached ResearchState into a live session, feeding activity log
+ * entries one-by-one with a configurable delay to preserve the "live stream"
+ * feel during a demo. After all entries are replayed, copies all finding
+ * slots from the cached state and sets the terminal status so the SSE poller
+ * closes the stream naturally — no frontend changes needed.
+ */
+export async function replayCachedSession(
+  sessionId: string,
+  cachedState: ResearchState,
+  delayMs = 150
+): Promise<void> {
+  if (!sessions.has(sessionId)) return;
+
+  for (const entry of cachedState.activity_log) {
+    pushActivityLog(sessionId, entry.agent, entry.message, entry.level);
+    await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    if (!sessions.has(sessionId)) return; // session destroyed mid-replay
+  }
+
+  const s = sessions.get(sessionId);
+  if (!s) return;
+
+  if (cachedState.deal_signals)      s.deal_signals      = cachedState.deal_signals;
+  if (cachedState.firm_profile)      s.firm_profile      = cachedState.firm_profile;
+  if (cachedState.contacts)          s.contacts          = cachedState.contacts;
+  if (cachedState.fit_assessment)    s.fit_assessment    = cachedState.fit_assessment;
+  if (cachedState.pitch_package)     s.pitch_package     = cachedState.pitch_package;
+  if (cachedState.landscape_results) s.landscape_results = cachedState.landscape_results;
+
+  updateStatus(sessionId, cachedState.status, cachedState.error_message);
+}
+
+/**
  * Direct setter for LandscapeScanResult — used by the Orchestrator at the end
  * of a landscape scan run (it synthesizes the result itself rather than via tool call).
  */

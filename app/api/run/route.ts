@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSession } from "@/lib/tools/research-state";
+import { createSession, replayCachedSession } from "@/lib/tools/research-state";
 import { runOrchestrator } from "@/lib/agents/orchestrator";
+import { findCachedState } from "@/lib/cache-lookup";
 import type { ResearchMode } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs"; // required for fs access in findCachedState
 
 export async function POST(request: NextRequest) {
   let body: { mode?: ResearchMode; query?: string };
@@ -26,6 +28,13 @@ export async function POST(request: NextRequest) {
   }
 
   const trimmedQuery = query.trim();
+
+  // ── Cache lookup ──────────────────────────────────────────────────────────
+  // Before firing a live agent run, check if we have a pre-cached ResearchState
+  // for this query. Matching is case-insensitive and punctuation-insensitive so
+  // "Riverside Company", "riverside company", and "Riverside" all hit the cache.
+  const cachedState = findCachedState(trimmedQuery);
+
   const session_id = createSession({
     user_query: trimmedQuery,
     mode,
@@ -34,6 +43,17 @@ export async function POST(request: NextRequest) {
       : { landscape_criteria: trimmedQuery }),
   });
 
+  if (cachedState) {
+    // Replay cached activity log with 150ms inter-event delay so the demo
+    // ActivityFeed streams live. The SSE route needs no changes — it polls
+    // activity_log and terminal status exactly as it would for a live run.
+    replayCachedSession(session_id, cachedState).catch((err) => {
+      console.error(`[cache-replay] session ${session_id} crashed:`, err);
+    });
+    return NextResponse.json({ session_id, cached: true });
+  }
+
+  // ── Live run ──────────────────────────────────────────────────────────────
   // Fire-and-forget — POST returns immediately; all results flow to the client
   // via the SSE stream at GET /api/stream/[sessionId].
   runOrchestrator(session_id).catch((err) => {
