@@ -91,9 +91,9 @@ export function IntelCard({ state }: Props) {
               </p>
             )}
 
-            {firm_profile?.sector_focus && firm_profile.sector_focus.length > 0 && (
+            {(firm_profile?.sector_focus?.length ?? 0) > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
-                {firm_profile.sector_focus.map((s) => (
+                {firm_profile!.sector_focus.map((s) => (
                   <span key={s} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
                     {s}
                   </span>
@@ -176,13 +176,13 @@ export function IntelCard({ state }: Props) {
             </p>
           )}
 
-          {firm_profile.operating_partners.length > 0 && (
+          {(firm_profile.operating_partners?.length ?? 0) > 0 && (
             <div className="mb-4">
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                 Operating Partners
               </div>
               <div className="space-y-2">
-                {firm_profile.operating_partners.map((op, i) => (
+                {(firm_profile.operating_partners ?? []).map((op, i) => (
                   <div key={i} className="p-3 bg-slate-50 rounded-lg">
                     <div className="font-semibold text-sm text-slate-800">{op.name}</div>
                     <div className="text-xs text-slate-500 mb-1">{op.title}</div>
@@ -193,13 +193,13 @@ export function IntelCard({ state }: Props) {
             </div>
           )}
 
-          {firm_profile.recent_portfolio.length > 0 && (
+          {(firm_profile.recent_portfolio?.length ?? 0) > 0 && (
             <div>
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                 Recent Portfolio ({firm_profile.recent_portfolio.length})
               </div>
               <div className="space-y-2">
-                {firm_profile.recent_portfolio.slice(0, 10).map((co, i) => (
+                {(firm_profile.recent_portfolio ?? []).slice(0, 10).map((co, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm">
                     <div className="flex-1 font-medium text-slate-800 min-w-0 truncate">
                       {co.name}
@@ -248,9 +248,11 @@ export function IntelCard({ state }: Props) {
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-0.5">
                 <span className="font-semibold text-slate-900">{topContact.name}</span>
-                <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full capitalize">
-                  {topContact.contact_type.replace(/_/g, " ")}
-                </span>
+                {topContact.contact_type && (
+                  <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full capitalize">
+                    {topContact.contact_type.replace(/_/g, " ")}
+                  </span>
+                )}
                 {topContact.linkedin_url && (
                   <a
                     href={topContact.linkedin_url}
@@ -263,7 +265,9 @@ export function IntelCard({ state }: Props) {
                 )}
               </div>
               <div className="text-sm text-slate-500 mb-2">{topContact.title}</div>
-              <p className="text-sm text-slate-600 leading-relaxed">{topContact.background_summary}</p>
+              {topContact.background_summary && (
+                <p className="text-sm text-slate-600 leading-relaxed">{topContact.background_summary}</p>
+              )}
 
               {topContact.recent_public_statements && (
                 <div className="mt-2 p-2.5 bg-slate-50 rounded-lg text-xs text-slate-600 italic leading-relaxed">
