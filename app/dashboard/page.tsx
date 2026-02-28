@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Radar, Search, LayoutGrid, Loader2 } from "lucide-react";
+import { Radar, Search, LayoutGrid } from "lucide-react";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { IntelCard } from "@/components/IntelCard";
 import type { ActivityLogEntry, ResearchState } from "@/lib/types";
