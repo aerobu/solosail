@@ -7,6 +7,7 @@ import {
   READ_RESEARCH_STATE_TOOL,
 } from "@/lib/tools/research-state";
 import { runAgentLoop } from "./_runner";
+import { getSystemPrompt } from "./base";
 import type { StoreFindingInput } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────
@@ -188,10 +189,13 @@ export async function runPitchGenerator(
     `Open the cold email with the most specific emphasis_point listed above. ` +
     `Every sentence must be grounded in actual research findings — not generic consulting language.`;
 
+  const agentConfig = getState(sessionId)?.agent_config;
+  const resolvedPrompt = getSystemPrompt(SYSTEM_PROMPT, agentConfig);
+
   await runAgentLoop({
     sessionId,
     agentName: "pitch_generator",
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: resolvedPrompt,
     initialMessage,
     tools: [READ_RESEARCH_STATE_TOOL, STORE_FINDING_TOOL],
     toolExecutor: createToolExecutor(sessionId),

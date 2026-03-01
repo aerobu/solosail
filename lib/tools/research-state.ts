@@ -5,6 +5,7 @@ import type {
   ResearchBrief,
   ActivityLogEntry,
   AgentName,
+  AgentConfig,
   FindingType,
   DealSignalAgentOutput,
   FirmProfile,
@@ -65,14 +66,18 @@ function emit(sessionId: string, event: string, data: unknown): void {
 /**
  * Creates a new research session. Returns the sessionId.
  * Called by POST /api/run immediately before kicking off the Orchestrator.
+ * Optionally accepts an AgentConfig that re-frames all agent system prompts
+ * for the user's specific consulting practice.
  */
 export function createSession(
-  brief: Omit<ResearchBrief, "created_at">
+  brief: Omit<ResearchBrief, "created_at">,
+  agentConfig?: AgentConfig
 ): string {
   const session_id = randomUUID();
   const state: ResearchState = {
     session_id,
     research_brief: { ...brief, created_at: new Date().toISOString() },
+    ...(agentConfig ? { agent_config: agentConfig } : {}),
     activity_log: [],
     status: "running",
   };

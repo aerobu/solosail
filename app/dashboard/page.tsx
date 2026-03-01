@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Radar, Search, LayoutGrid, ArrowRight, Loader2 } from "lucide-react";
+import { Radar, Search, LayoutGrid, ArrowRight, Loader2, SlidersHorizontal } from "lucide-react";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { IntelCard } from "@/components/IntelCard";
-import type { ActivityLogEntry, ResearchState } from "@/lib/types";
+import { OnboardingModal } from "@/components/OnboardingModal";
+import { loadProfile } from "@/lib/profile";
+import type { ActivityLogEntry, ResearchState, ServiceProfile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Mode = "deep_dive" | "landscape_scan";
@@ -18,9 +20,19 @@ export default function Dashboard() {
   const [log, setLog]                 = useState<ActivityLogEntry[]>([]);
   const [finalState, setFinalState]   = useState<ResearchState | null>(null);
   const [error, setError]             = useState<string | null>(null);
+  const [showModal, setShowModal]     = useState(false);
+  const [showEdit, setShowEdit]       = useState(false);
+  const [profile, setProfile]         = useState<ServiceProfile | null>(null);
   const esRef                         = useRef<EventSource | null>(null);
 
   useEffect(() => () => { esRef.current?.close(); }, []);
+
+  // Check for first-visit on mount (client-side only)
+  useEffect(() => {
+    const p = loadProfile();
+    setProfile(p);
+    if (!p) setShowModal(true);
+  }, []);
 
   async function startRun(runQuery: string, runMode: Mode = mode) {
     if (!runQuery.trim() || running) return;
@@ -32,10 +44,15 @@ export default function Dashboard() {
     setError(null);
 
     try {
+      const currentProfile = loadProfile();
       const res = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: runMode, query: runQuery.trim() }),
+        body: JSON.stringify({
+          mode: runMode,
+          query: runQuery.trim(),
+          ...(currentProfile ? { agent_config: currentProfile.structured_config } : {}),
+        }),
       });
 
       if (!res.ok) {
@@ -120,15 +137,38 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {running && (
-            <div className="flex items-center gap-2 font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: "var(--accent-green)" }} />
-                <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: "var(--accent-green)" }} />
-              </span>
-              RUNNING
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowEdit(true)}
+              className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] px-2.5 py-1.5 rounded transition-colors"
+              style={{
+                color: "var(--text-muted)",
+                border: "1px solid var(--border)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--text-secondary)";
+                e.currentTarget.style.borderColor = "var(--border-bright)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--text-muted)";
+                e.currentTarget.style.borderColor = "var(--border)";
+              }}
+            >
+              <SlidersHorizontal className="w-3 h-3" />
+              {profile ? "Edit Profile" : "Set Up Profile"}
+            </button>
+
+            {running && (
+              <div className="flex items-center gap-2 font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: "var(--accent-green)" }} />
+                  <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: "var(--accent-green)" }} />
+                </span>
+                RUNNING
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -359,6 +399,25 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {/* First-visit onboarding modal */}
+      <OnboardingModal
+        open={showModal}
+        onClose={() => {
+          setShowModal(false);
+          setProfile(loadProfile());
+        }}
+      />
+
+      {/* Edit Profile modal */}
+      <OnboardingModal
+        open={showEdit}
+        onClose={() => {
+          setShowEdit(false);
+          setProfile(loadProfile());
+        }}
+        prefill={profile}
+      />
     </div>
   );
 }

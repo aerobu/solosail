@@ -1,11 +1,13 @@
 import {
   handleStoreFinding,
   pushActivityLog,
+  getState,
 } from "@/lib/tools/research-state";
 import { handleWebSearch, WEB_SEARCH_TOOL } from "@/lib/tools/web-search";
 import { handleFetchPage, FETCH_PAGE_TOOL } from "@/lib/tools/fetch-page";
 import { STORE_FINDING_TOOL } from "@/lib/tools/research-state";
 import { runAgentLoop } from "./_runner";
+import { getSystemPrompt } from "./base";
 import type { StoreFindingInput } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────
@@ -165,10 +167,13 @@ export async function runFirmProfileAgent(
     "info"
   );
 
+  const agentConfig = getState(sessionId)?.agent_config;
+  const resolvedPrompt = getSystemPrompt(SYSTEM_PROMPT, agentConfig);
+
   await runAgentLoop({
     sessionId,
     agentName: "firm_profile",
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: resolvedPrompt,
     initialMessage:
       `Target Firm: ${firmName}\n\n` +
       `Build a complete intelligence profile for ${firmName}. ` +
@@ -181,7 +186,7 @@ export async function runFirmProfileAgent(
     maxIterations: 4,
   });
 
-  const { getState } = await import("@/lib/tools/research-state");
+
   const state = getState(sessionId);
   const profile = state?.firm_profile;
 

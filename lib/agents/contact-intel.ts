@@ -2,6 +2,7 @@ import {
   handleStoreFinding,
   handleReadResearchState,
   pushActivityLog,
+  getState,
 } from "@/lib/tools/research-state";
 import { handleWebSearch, WEB_SEARCH_TOOL } from "@/lib/tools/web-search";
 import { handleFetchPage, FETCH_PAGE_TOOL } from "@/lib/tools/fetch-page";
@@ -10,6 +11,7 @@ import {
   READ_RESEARCH_STATE_TOOL,
 } from "@/lib/tools/research-state";
 import { runAgentLoop } from "./_runner";
+import { getSystemPrompt } from "./base";
 import type { StoreFindingInput } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────
@@ -171,10 +173,13 @@ export async function runContactIntelAgent(
     "info"
   );
 
+  const agentConfig = getState(sessionId)?.agent_config;
+  const resolvedPrompt = getSystemPrompt(SYSTEM_PROMPT, agentConfig);
+
   await runAgentLoop({
     sessionId,
     agentName: "contact_intel",
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: resolvedPrompt,
     initialMessage:
       `Target Firm: ${firmName}\n\n` +
       `Find the best person to pitch procurement consulting services to at ${firmName}. ` +
@@ -193,7 +198,7 @@ export async function runContactIntelAgent(
     maxIterations: 3,
   });
 
-  const { getState } = await import("@/lib/tools/research-state");
+
   const state = getState(sessionId);
   const contacts = state?.contacts;
   const count = contacts?.contacts?.length ?? 0;

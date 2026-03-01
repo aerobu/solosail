@@ -199,6 +199,31 @@ export interface PitchPackage {
 }
 
 // ─────────────────────────────────────────────────────────────
+// SERVICE PROFILE — user-defined consulting configuration
+// Stored in localStorage; controls agent behavior for any domain
+// ─────────────────────────────────────────────────────────────
+
+export interface AgentConfig {
+  service_domain: string;          // e.g. "food safety consulting", "procurement due diligence"
+  target_entity_type: string;      // e.g. "PE-backed food manufacturers"
+  high_signal_sectors: string[];   // 4-6 sectors where this consultant's work is most needed
+  low_signal_sectors: string[];    // 2-4 sectors unlikely to need this service
+  buying_signal_triggers: string[]; // 4-8 specific events that indicate a buying opportunity
+  ideal_contact_titles: string[];  // 3-5 job titles most likely to champion this service
+  value_framing: string;           // one sentence: how the consultant frames their value prop
+}
+
+export interface ServiceProfile {
+  profile_id: string;              // UUID generated at creation
+  created_at: string;              // ISO string
+  updated_at: string;              // ISO string
+  service_description: string;    // free text: what the user offers
+  target_client_description: string; // free text: who their ideal client is
+  buying_signals: string[];        // raw list before Claude interpretation
+  structured_config: AgentConfig; // Claude-interpreted structured version
+}
+
+// ─────────────────────────────────────────────────────────────
 // RESEARCH STATE — shared in-memory session object (Section 4.4)
 // ─────────────────────────────────────────────────────────────
 
@@ -230,6 +255,8 @@ export interface ResearchState {
   pitch_package?: PitchPackage;
   // Landscape Scan mode output (Orchestrator synthesizes Agent 2 output into this)
   landscape_results?: LandscapeScanResult;
+  // Optional user-defined consulting profile — controls agent system prompt framing
+  agent_config?: AgentConfig;
   activity_log: ActivityLogEntry[];
   status: "running" | "complete" | "low_fit" | "error";
   error_message?: string;

@@ -2,20 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSession, replayCachedSession } from "@/lib/tools/research-state";
 import { runOrchestrator } from "@/lib/agents/orchestrator";
 import { findCachedState } from "@/lib/cache-lookup";
-import type { ResearchMode } from "@/lib/types";
+import type { ResearchMode, AgentConfig } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs"; // required for fs access in findCachedState
 
 export async function POST(request: NextRequest) {
-  let body: { mode?: ResearchMode; query?: string };
+  let body: { mode?: ResearchMode; query?: string; agent_config?: AgentConfig };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { mode, query } = body;
+  const { mode, query, agent_config } = body;
 
   if (!mode || !["deep_dive", "landscape_scan"].includes(mode)) {
     return NextResponse.json(
@@ -35,13 +35,16 @@ export async function POST(request: NextRequest) {
   // "Riverside Company", "riverside company", and "Riverside" all hit the cache.
   const cachedState = findCachedState(trimmedQuery);
 
-  const session_id = createSession({
-    user_query: trimmedQuery,
-    mode,
-    ...(mode === "deep_dive"
-      ? { target_firm_name: trimmedQuery }
-      : { landscape_criteria: trimmedQuery }),
-  });
+  const session_id = createSession(
+    {
+      user_query: trimmedQuery,
+      mode,
+      ...(mode === "deep_dive"
+        ? { target_firm_name: trimmedQuery }
+        : { landscape_criteria: trimmedQuery }),
+    },
+    agent_config ?? undefined
+  );
 
   if (cachedState) {
     // Replay cached activity log with 150ms inter-event delay so the demo

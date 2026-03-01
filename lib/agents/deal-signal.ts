@@ -1,6 +1,7 @@
 import {
   handleStoreFinding,
   pushActivityLog,
+  getState,
 } from "@/lib/tools/research-state";
 import { handleWebSearch, WEB_SEARCH_TOOL } from "@/lib/tools/web-search";
 import { handleFetchPage, FETCH_PAGE_TOOL } from "@/lib/tools/fetch-page";
@@ -8,6 +9,7 @@ import {
   STORE_FINDING_TOOL,
 } from "@/lib/tools/research-state";
 import { runAgentLoop } from "./_runner";
+import { getSystemPrompt } from "./base";
 import type { StoreFindingInput } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────
@@ -161,10 +163,13 @@ export async function runDealSignalAgent(
     "info"
   );
 
+  const agentConfig = getState(sessionId)?.agent_config;
+  const resolvedPrompt = getSystemPrompt(SYSTEM_PROMPT, agentConfig);
+
   await runAgentLoop({
     sessionId,
     agentName: "deal_signal",
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: resolvedPrompt,
     initialMessage:
       `Search Focus: ${searchFocus}\n\n` +
       `Find PE firms with recent procurement-relevant deal activity matching this focus. ` +
@@ -175,7 +180,6 @@ export async function runDealSignalAgent(
     maxIterations: 8,
   });
 
-  const { getState } = await import("@/lib/tools/research-state");
   const state = getState(sessionId);
   const count = state?.deal_signals?.firms?.length ?? 0;
 

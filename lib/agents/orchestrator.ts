@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getSystemPrompt } from "./base";
 import type {
   MessageParam,
   ToolResultBlockParam,
@@ -613,6 +614,8 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
     },
   ];
 
+  const resolvedPrompt = getSystemPrompt(SYSTEM_PROMPT, state.agent_config);
+
   // Shared mutable stop signal. Tool handlers set shouldStop = true
   // to break the loop (e.g., after mark_low_fit).
   const stopSignal = { shouldStop: false };
@@ -626,7 +629,7 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
       const response = await client.messages.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        system: SYSTEM_PROMPT,
+        system: resolvedPrompt,
         tools: ORCHESTRATOR_TOOLS,
         messages,
       });
@@ -709,7 +712,7 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
           const finalResponse = await client.messages.create({
             model: MODEL,
             max_tokens: 256,
-            system: SYSTEM_PROMPT,
+            system: resolvedPrompt,
             tools: ORCHESTRATOR_TOOLS,
             messages,
           });

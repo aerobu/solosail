@@ -7,6 +7,7 @@ import {
   READ_RESEARCH_STATE_TOOL,
 } from "@/lib/tools/research-state";
 import { runAgentLoop } from "./_runner";
+import { getSystemPrompt } from "./base";
 import type { StoreFindingInput } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────
@@ -136,10 +137,13 @@ export async function runFitScorer(sessionId: string): Promise<void> {
     "info"
   );
 
+  const agentConfig = getState(sessionId)?.agent_config;
+  const resolvedPrompt = getSystemPrompt(SYSTEM_PROMPT, agentConfig);
+
   await runAgentLoop({
     sessionId,
     agentName: "fit_scorer",
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: resolvedPrompt,
     initialMessage:
       "Read the full research state, then produce a structured fit assessment " +
       "for the PE firm's procurement consulting potential. " +
