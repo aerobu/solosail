@@ -92,6 +92,120 @@ export function IntelCard({ state }: Props) {
   const displayScore: FitScore | null =
     fit_assessment?.score ?? (status === "low_fit" ? "Low" : null);
 
+  // ── Landscape Scan complete: ranked firm list ───────────────
+  if (state.research_brief.mode === "landscape_scan" && status === "complete") {
+    const firms = [...(deal_signals?.firms ?? [])].sort(
+      (a, b) => a.relevance_rank - b.relevance_rank
+    );
+
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        >
+          <div
+            className="h-[3px] w-full"
+            style={{ backgroundColor: firms.length > 0 ? "var(--accent-green)" : "var(--border-bright)" }}
+          />
+          <div className="p-6">
+            <h2
+              className="font-serif leading-tight"
+              style={{ fontSize: "40px", color: "var(--text-primary)" }}
+            >
+              {firms.length > 0
+                ? `${firms.length} Target${firms.length !== 1 ? "s" : ""} Found`
+                : "No Targets Found"}
+            </h2>
+            {deal_signals?.scan_query && (
+              <p className="font-mono text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+                Scan: {deal_signals.scan_query}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Ranked firm list */}
+        {firms.length > 0 && (
+          <Section title={`Procurement Targets — ${firms.length} Ranked`}>
+            <div className="space-y-3">
+              {firms.map((sig, i) => (
+                <div
+                  key={i}
+                  className="p-4 rounded-lg flex gap-4"
+                  style={{
+                    backgroundColor: "var(--bg-elevated)",
+                    borderLeft: "2px solid var(--accent-blue)",
+                  }}
+                >
+                  {/* Rank */}
+                  <div
+                    className="font-mono text-xl font-bold flex-shrink-0 w-6 leading-none mt-0.5"
+                    style={{ color: "var(--border-bright)" }}
+                  >
+                    {String(sig.relevance_rank).padStart(2, "0")}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                        {sig.firm_name}
+                      </span>
+                      <span
+                        className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded"
+                        style={{ backgroundColor: "rgba(59,130,246,0.12)", color: "var(--accent-blue)" }}
+                      >
+                        {sig.signal_type.replace(/_/g, " ")}
+                      </span>
+                      {sig.sector && (
+                        <span
+                          className="font-mono text-[10px] px-2 py-0.5 rounded"
+                          style={{
+                            backgroundColor: "var(--bg-surface)",
+                            border: "1px solid var(--border)",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          {sig.sector}
+                        </span>
+                      )}
+                      {sig.deal_date && (
+                        <span className="font-mono text-[10px]" style={{ color: "var(--text-muted)" }}>
+                          {sig.deal_date}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm leading-relaxed mb-2" style={{ color: "var(--text-secondary)" }}>
+                      {sig.signal_description}
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      {(sig.source_urls ?? []).map((url, j) => (
+                        <a
+                          key={j}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group flex items-center gap-1 font-mono text-[10px] transition-colors"
+                          style={{ color: "var(--text-muted)" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent-blue)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
+                        >
+                          Source {j + 1}
+                          <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+      </div>
+    );
+  }
+
   // ── Low fit / no results: full-panel centered state ────────
   if (status === "low_fit") {
     const isLandscapeNoResults =
@@ -301,7 +415,7 @@ export function IntelCard({ state }: Props) {
                   {sig.signal_description}
                 </p>
                 <div className="flex flex-wrap gap-3">
-                  {sig.source_urls.map((url, j) => (
+                  {(sig.source_urls ?? []).map((url, j) => (
                     <a
                       key={j}
                       href={url}
@@ -638,7 +752,7 @@ export function IntelCard({ state }: Props) {
               </div>
             )}
 
-            {fit_assessment.objections.length > 0 && (
+            {(fit_assessment.objections ?? []).length > 0 && (
               <div>
                 <div
                   className="font-mono text-[10px] uppercase tracking-[0.12em] mb-2"
@@ -647,7 +761,7 @@ export function IntelCard({ state }: Props) {
                   Likely Objections
                 </div>
                 <ul className="space-y-1.5">
-                  {fit_assessment.objections.map((obj, i) => (
+                  {(fit_assessment.objections ?? []).map((obj, i) => (
                     <li key={i} className="flex gap-2 text-xs">
                       <span className="flex-shrink-0 mt-0.5" style={{ color: "var(--border-bright)" }}>›</span>
                       <span style={{ color: "var(--text-secondary)" }}>{obj}</span>
