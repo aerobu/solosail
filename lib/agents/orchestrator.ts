@@ -128,11 +128,15 @@ Given a user query (a specific PE firm name for Deep Dive mode, or search criter
 7. When pitch returns: you are done — end your turn
 
 ### Landscape Scan Mode (criteria provided, no specific firm):
-1. Dispatch run_deal_signal_agent with the user's search criteria as search_focus
-2. Read deal_signals from research state. Select the 3-5 most compelling firms.
-3. For the top 1-2 firms, optionally dispatch run_firm_profile_agent for a lightweight check
-4. Dispatch run_fit_scorer to produce preliminary scores
-5. End your turn with a brief summary of the ranked firms
+1. Dispatch run_deal_signal_agent with a specific, decomposed search_focus derived from the user's criteria. If the criteria includes a geographic term (west coast, California, Pacific Northwest, etc.), expand it into specific cities in the search_focus — e.g., "PE firms in Los Angeles, San Francisco, Seattle acquiring manufacturing or industrial companies 2024-2025".
+2. If zero firms are returned: DO NOT call mark_low_fit yet. A zero-result response is almost always a search query problem, not a genuine absence of matching firms. Retry run_deal_signal_agent with a different formulation — try at minimum 2 more variations before giving up:
+   - Variation A: Break the geography into individual city searches
+   - Variation B: Drop the geographic constraint entirely and search by sector only, then filter by location in your reasoning
+3. Only call mark_low_fit after exhausting at least 3 different search formulations and still finding zero results.
+4. Once results are found: read deal_signals and select the 3-5 most compelling firms.
+5. For the top 1-2 firms, optionally dispatch run_firm_profile_agent for a lightweight check
+6. Dispatch run_fit_scorer to produce preliminary scores
+7. End your turn with a brief summary of the ranked firms
 
 ### When to dig deeper (run a follow-up web_search):
 - Firm profile returned sparse data (fund size unknown, no recent portfolio)
@@ -391,31 +395,19 @@ async function executeOrchestratorTool(
       const state = getState(sessionId);
       const signals = state?.deal_signals;
       if (!signals?.firms?.length) {
-        // TypeScript guard: in Landscape Scan mode, zero signals means there is
-        // nothing to research further — stop the run rather than letting Claude
-        // spin trying to find a different angle with no raw material to work from.
-        if (state?.research_brief.mode === "landscape_scan") {
-          pushActivityLog(
-            sessionId,
-            "orchestrator",
-            "No procurement-relevant signals found for this search. Ending landscape scan.",
-            "warning"
-          );
-          updateStatus(
-            sessionId,
-            "low_fit",
-            "The deal signal scan found no procurement-relevant deal activity matching the search criteria."
-          );
-          stopSignal.shouldStop = true;
-        }
+        // Zero results — return context to Claude and let it decide whether to
+        // retry with different search formulations. Do NOT auto-stop here: the
+        // most common cause of zero results is a query formulation problem
+        // (e.g. geographic terms that need city-level decomposition), not a
+        // genuine absence of matching firms. Claude will retry per its system
+        // prompt instructions before deciding to call mark_low_fit.
         return JSON.stringify({
-          result: "Deal Signal Agent completed. No significant signals found.",
+          result: "Deal Signal Agent completed. No procurement-relevant firms found with this search.",
           firms_found: 0,
-          ...(state?.research_brief.mode === "landscape_scan" && {
-            run_ended: true,
-            reason:
-              "Landscape scan auto-stopped: no procurement-relevant firms found for this search criteria.",
-          }),
+          next_step:
+            "Try a different search formulation. If the criteria included a geographic term (e.g. 'west coast'), " +
+            "decompose it into specific city names (Los Angeles, San Francisco, Seattle, Portland). " +
+            "Try at least 2 more formulations before calling mark_low_fit.",
         });
       }
       const summary = signals.firms

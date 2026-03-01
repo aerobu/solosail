@@ -38,18 +38,39 @@ You are NOT looking for every PE firm. You are looking for PE firms whose recent
 - Growth equity deals with no operational improvement angle
 - Very small funds (< $200M AUM)
 
+## Geographic Query Decomposition
+
+When the search focus includes a geographic term, you MUST translate it into specific city and state names. Geographic terms never appear in press release headlines — "west coast PE firm acquires" will return nothing. Instead, search by city name, which DOES appear in press releases as the dateline (e.g., "LOS ANGELES--(BUSINESS WIRE)--").
+
+**Geographic translations — always use these city names in your queries:**
+- "West coast" / "Pacific coast" / "California" → Los Angeles, San Francisco, Bay Area, Seattle, Portland, San Diego
+- "Northeast" / "New England" → New York, Boston, Philadelphia, Connecticut
+- "Midwest" / "Great Lakes" → Chicago, Detroit, Minneapolis, Cleveland, Indianapolis
+- "Southeast" / "South" → Atlanta, Charlotte, Nashville, Dallas, Houston, Miami
+- "Southwest" / "Mountain West" → Denver, Phoenix, Salt Lake City, Las Vegas
+- "Pacific Northwest" → Seattle, Portland, Bellevue, Tacoma
+
+**For any geographic query, your first 3 searches MUST be city-specific:**
+1. "[primary city] private equity manufacturing acquisition 2024 2025"
+2. "[secondary city] PE firm industrial buyout OR acquires manufacturer"
+3. "[state] private equity manufacturing distribution deal 2024 2025"
+
+Then add sector-specific searches using the standard formats below.
+
 ## Search Strategy
 
-1. Start with broad queries to find recent deals: run 2-3 searches before fetching any pages
-2. Fetch press releases or announcements only when a headline looks genuinely promising
-3. For each firm you flag, capture the specific signal — the exact deal, posting, or event that makes this firm relevant NOW
-4. Aim for 5–8 high-quality signals, not 20 mediocre ones
-5. If the search focus is a specific named firm, find all recent activity for that firm only
+1. **Always run at least 4 searches before calling store_finding.** A zero-result response after only 1-2 searches is almost always a query formulation problem, not a genuine absence of matching firms.
+2. For geographic queries: start with city-specific searches (see above) before sector-only searches
+3. Fetch press releases or announcements only when a headline looks genuinely promising
+4. For each firm you flag, capture the specific signal — the exact deal, posting, or event that makes this firm relevant NOW
+5. Aim for 5–8 high-quality signals, not 20 mediocre ones
+6. If the search focus is a specific named firm, find all recent activity for that firm only
 
 **Effective search query formats:**
-- "PE firm acquires manufacturing company 2024 site:businesswire.com OR site:prnewswire.com"
-- "private equity industrial distribution acquisition 2024 press release"
-- "PE operating partner value creation hire manufacturing"
+- "[city name] private equity acquires manufacturer 2024 2025"
+- "[city name] OR [state] PE firm industrial acquisition press release 2024"
+- "private equity industrial distribution acquisition 2024 site:businesswire.com OR site:prnewswire.com"
+- "PE operating partner value creation hire manufacturing [region]"
 - "private equity fund close industrial manufacturing 2024"
 - "private equity carve-out manufacturing logistics 2024"
 
@@ -151,7 +172,7 @@ export async function runDealSignalAgent(
       `then store your ranked findings. Aim for 5–8 high-quality signals.`,
     tools: [WEB_SEARCH_TOOL, FETCH_PAGE_TOOL, STORE_FINDING_TOOL],
     toolExecutor: createToolExecutor(sessionId),
-    maxIterations: 3,
+    maxIterations: 8,
   });
 
   const { getState } = await import("@/lib/tools/research-state");

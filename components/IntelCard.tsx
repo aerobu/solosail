@@ -92,36 +92,79 @@ export function IntelCard({ state }: Props) {
   const displayScore: FitScore | null =
     fit_assessment?.score ?? (status === "low_fit" ? "Low" : null);
 
-  // ── Low fit: full-panel centered state ──────────────────────
+  // ── Low fit / no results: full-panel centered state ────────
   if (status === "low_fit") {
+    const isLandscapeNoResults =
+      state.research_brief.mode === "landscape_scan";
+
     return (
       <div
         className="rounded-xl overflow-hidden text-center"
         style={{
           backgroundColor: "var(--bg-surface)",
-          border: "1px solid rgba(239,68,68,0.25)",
+          border: `1px solid ${isLandscapeNoResults ? "rgba(71,85,105,0.4)" : "rgba(239,68,68,0.25)"}`,
         }}
       >
-        <div className="h-[3px] w-full" style={{ backgroundColor: "var(--accent-red)" }} />
+        <div
+          className="h-[3px] w-full"
+          style={{ backgroundColor: isLandscapeNoResults ? "var(--border-bright)" : "var(--accent-red)" }}
+        />
         <div className="p-14">
           <div
             className="font-serif mb-4"
-            style={{ fontSize: "64px", lineHeight: 1, color: "var(--accent-red)" }}
+            style={{
+              fontSize: "56px",
+              lineHeight: 1,
+              color: isLandscapeNoResults ? "var(--text-secondary)" : "var(--accent-red)",
+            }}
           >
-            Low Fit
+            {isLandscapeNoResults ? "No Firms Found" : "Low Fit"}
           </div>
           <p
             className="font-mono text-sm max-w-md mx-auto leading-relaxed"
             style={{ color: "var(--text-secondary)" }}
           >
-            {error_message ?? "This firm does not meet the minimum criteria for productive outreach."}
+            {error_message ?? (
+              isLandscapeNoResults
+                ? "No procurement-relevant firms matched this search criteria."
+                : "This firm does not meet the minimum criteria for productive outreach."
+            )}
           </p>
-          <div
-            className="mt-6 font-mono text-xs uppercase tracking-[0.15em]"
-            style={{ color: "var(--text-muted)" }}
-          >
-            {firmName}
-          </div>
+          {isLandscapeNoResults && (
+            <div className="mt-6 space-y-2">
+              <div
+                className="font-mono text-xs uppercase tracking-[0.15em] mb-3"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Try broadening your search
+              </div>
+              {[
+                "PE firms acquiring manufacturing companies 2024 2025",
+                "Private equity industrial distribution buyout recent",
+                "PE firm buys manufacturer press release 2024",
+              ].map((suggestion) => (
+                <div
+                  key={suggestion}
+                  className="font-mono text-xs px-3 py-1.5 rounded inline-block mx-1"
+                  style={{
+                    backgroundColor: "var(--bg-elevated)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  {suggestion}
+                </div>
+              ))}
+            </div>
+          )}
+          {!isLandscapeNoResults && (
+            <div
+              className="mt-6 font-mono text-xs uppercase tracking-[0.15em]"
+              style={{ color: "var(--text-muted)" }}
+            >
+              {firmName}
+            </div>
+          )}
         </div>
       </div>
     );
