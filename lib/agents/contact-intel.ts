@@ -196,6 +196,7 @@ export async function runContactIntelAgent(
     ],
     toolExecutor: createToolExecutor(sessionId),
     maxIterations: 3,
+    model: "claude-haiku-4-5-20251001",
   });
 
 

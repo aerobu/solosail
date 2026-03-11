@@ -151,7 +151,7 @@ export async function runFitScorer(sessionId: string): Promise<void> {
       "Store the assessment when complete.",
     tools: [READ_RESEARCH_STATE_TOOL, STORE_FINDING_TOOL],
     toolExecutor: createToolExecutor(sessionId),
-    maxIterations: 5,
+    maxIterations: 3,
   });
 
   const state = getState(sessionId);

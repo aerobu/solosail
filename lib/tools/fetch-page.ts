@@ -11,9 +11,9 @@ const USER_AGENT =
 
 const FETCH_TIMEOUT_MS = 15_000;
 
-// ~6,000–7,000 tokens worth of text — well within Claude's context window
-// while still capturing the full content of most PE firm pages.
-const MAX_TEXT_CHARS = 24_000;
+// Default: ~2,500 tokens — sufficient for team/bio pages and press releases.
+// Firm Profile passes 24_000 for long portfolio pages.
+const DEFAULT_MAX_TEXT_CHARS = 10_000;
 
 // Elements that are almost always boilerplate with no intel value
 const NOISE_SELECTOR = [
@@ -69,7 +69,7 @@ const CONTENT_SELECTORS = [
  * handle failed fetches without crashing the agentic loop.
  */
 export async function fetchPage(input: FetchPageInput): Promise<FetchPageResult> {
-  const { url } = input;
+  const { url, max_chars = DEFAULT_MAX_TEXT_CHARS } = input;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -161,8 +161,8 @@ export async function fetchPage(input: FetchPageInput): Promise<FetchPageResult>
     .trim();
 
   const text_content =
-    cleaned.length > MAX_TEXT_CHARS
-      ? cleaned.slice(0, MAX_TEXT_CHARS) +
+    cleaned.length > max_chars
+      ? cleaned.slice(0, max_chars) +
         "\n\n[Content truncated — page was longer than the context budget]"
       : cleaned;
 
@@ -192,6 +192,12 @@ export const FETCH_PAGE_TOOL = {
           "The full URL to fetch including https://. " +
           "Good sources: firm websites (e.g. therivesideco.com/team), " +
           "BusinessWire/PRNewswire press releases, SEC.gov EDGAR filings.",
+      },
+      max_chars: {
+        type: "number",
+        description:
+          "Maximum characters of page text to return. Defaults to 10000 (~2500 tokens). " +
+          "Use 24000 for long portfolio pages with many company listings.",
       },
     },
     required: ["url"],

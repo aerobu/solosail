@@ -134,7 +134,7 @@ function createToolExecutor(sessionId: string) {
         });
 
       case "fetch_page":
-        return handleFetchPage({ url: input.url as string });
+        return handleFetchPage({ url: input.url as string, max_chars: 24_000 });
 
       case "store_finding":
         return JSON.stringify(
@@ -184,6 +184,7 @@ export async function runFirmProfileAgent(
     tools: [WEB_SEARCH_TOOL, FETCH_PAGE_TOOL, STORE_FINDING_TOOL],
     toolExecutor: createToolExecutor(sessionId),
     maxIterations: 4,
+    model: "claude-haiku-4-5-20251001",
   });
 
 

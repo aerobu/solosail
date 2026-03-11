@@ -31,7 +31,7 @@ const client = new Anthropic();
 
 const MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 4096;
-const MAX_ITERATIONS = 25; // safety ceiling on the agentic loop
+const MAX_ITERATIONS = 15; // safety ceiling on the agentic loop
 
 // ─────────────────────────────────────────────────────────────
 // System Prompt
@@ -629,7 +629,7 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
       const response = await client.messages.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        system: resolvedPrompt,
+        system: [{ type: "text", text: resolvedPrompt, cache_control: { type: "ephemeral" } }],
         tools: ORCHESTRATOR_TOOLS,
         messages,
       });
@@ -712,7 +712,7 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
           const finalResponse = await client.messages.create({
             model: MODEL,
             max_tokens: 256,
-            system: resolvedPrompt,
+            system: [{ type: "text", text: resolvedPrompt, cache_control: { type: "ephemeral" } }],
             tools: ORCHESTRATOR_TOOLS,
             messages,
           });

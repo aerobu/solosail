@@ -44,7 +44,7 @@ function getClient() {
 export async function webSearch(
   input: WebSearchInput
 ): Promise<WebSearchResult[]> {
-  const { query, max_results = 5 } = input;
+  const { query, max_results = 3 } = input;
 
   const response = await getClient().search(query, {
     maxResults: max_results,

@@ -15,19 +15,19 @@ PDX Hacks & AI Collective · Anthropic-sponsored hackathon · Spec: `SoloSail_Pr
 | File | Status | Description |
 |---|---|---|
 | `/lib/tools/research-state.ts` | ✅ Complete | In-memory session store using `globalThis` Maps (see Architectural Decisions). Exports `createSession`, `getState`, `pushActivityLog`, `handleStoreFinding`, `handleReadResearchState`, `updateStatus`, and Claude tool schemas. |
-| `/lib/tools/web-search.ts` | ✅ Complete | Tavily API wrapper. Lazy singleton client, `searchDepth: "advanced"`, graceful empty-result handling (returns `{ results: [], note }` — never throws). |
-| `/lib/tools/fetch-page.ts` | ✅ Complete | Native `fetch` + cheerio. 15s AbortController timeout, noise removal (nav/footer/scripts/ads), semantic content selectors before `body` fallback, 24,000 char cap. Graceful error payloads on all failure modes. |
+| `/lib/tools/web-search.ts` | ✅ Complete | Tavily API wrapper. Lazy singleton client, `searchDepth: "advanced"`, graceful empty-result handling (returns `{ results: [], note }` — never throws). Default `max_results` lowered to 3. |
+| `/lib/tools/fetch-page.ts` | ✅ Complete | Native `fetch` + cheerio. 15s AbortController timeout, noise removal (nav/footer/scripts/ads), semantic content selectors before `body` fallback. Default 10,000 char cap; `max_chars` param allows per-call override (firm-profile passes 24,000). Graceful error payloads on all failure modes. |
 
 ### Agent Runtime
 | File | Status | Description |
 |---|---|---|
 | `/lib/agents/_runner.ts` | ✅ Complete | Shared agentic loop — multi-turn Claude API, tool dispatch, activity logging of text blocks. Accepts any agent's system prompt, tools, and tool executor. Used by all 5 specialist agents. |
-| `/lib/agents/orchestrator.ts` | ✅ Complete | Brain. 9 tools (web_search, read_state, store_finding, 5 agent dispatchers, mark_low_fit). Dynamic research plan; `stopSignal` mutable object for clean `mark_low_fit` early termination. 25-iteration ceiling. Zero-signal landscape scan TypeScript guard. |
-| `/lib/agents/deal-signal.ts` | ✅ Complete | Scans BusinessWire/PRNewswire + general web for PE firms with recent procurement-relevant deal activity. Classifies HIGH/MEDIUM/LOW-value signals. 15-iteration ceiling. |
-| `/lib/agents/firm-profile.ts` | ✅ Complete | Builds structured firm intelligence (fund size, sector focus, thesis, portfolio, operating partners) from firm website → press releases → SEC EDGAR → industry news. "NEVER fabricate" rule enforced in system prompt. 14-iteration ceiling. |
-| `/lib/agents/contact-intel.ts` | ✅ Complete | Finds the right pitch target using a 4-tier priority hierarchy (Operating Partners first). Reads state first to reuse already-found partners. LinkedIn workaround via Google search patterns. 14-iteration ceiling. |
-| `/lib/agents/fit-scorer.ts` | ✅ Complete | Pure Claude reasoning. Scores on three axes (Sector Fit / Deal Activity / Access) and produces a `FitAssessment` with rationale, why_now, key_hook, objections with counters, and recommended outreach angle. No web calls. 5-iteration ceiling. |
-| `/lib/agents/pitch-generator.ts` | ✅ Complete | Pure Claude reasoning. Receives `emphasis_points` from Orchestrator in the initial message. Produces cold email (3-paragraph), ~150-word "Why Us, Why Now" brief, and exactly 5 discovery call talking points. Cardinal Rule: every sentence must come from research state. No web calls. 6-iteration ceiling. |
+| `/lib/agents/orchestrator.ts` | ✅ Complete | Brain. 9 tools (web_search, read_state, store_finding, 5 agent dispatchers, mark_low_fit). Dynamic research plan; `stopSignal` mutable object for clean `mark_low_fit` early termination. **15-iteration ceiling** (was 25). Prompt caching on system prompt. Zero-signal landscape scan TypeScript guard. |
+| `/lib/agents/deal-signal.ts` | ✅ Complete | **Model: claude-haiku-4-5-20251001.** Scans BusinessWire/PRNewswire + general web for PE firms with recent procurement-relevant deal activity. Classifies HIGH/MEDIUM/LOW-value signals. 8-iteration ceiling. |
+| `/lib/agents/firm-profile.ts` | ✅ Complete | **Model: claude-haiku-4-5-20251001.** Builds structured firm intelligence (fund size, sector focus, thesis, portfolio, operating partners). Passes `max_chars: 24000` to fetch-page for long portfolio pages. 4-iteration ceiling. |
+| `/lib/agents/contact-intel.ts` | ✅ Complete | **Model: claude-haiku-4-5-20251001.** Finds the right pitch target using a 4-tier priority hierarchy (Operating Partners first). Reads state first to reuse already-found partners. 3-iteration ceiling. |
+| `/lib/agents/fit-scorer.ts` | ✅ Complete | **Model: claude-sonnet-4-6.** Pure Claude reasoning. Scores on three axes (Sector Fit / Deal Activity / Access). Prompt caching on system prompt. **3-iteration ceiling** (was 5). |
+| `/lib/agents/pitch-generator.ts` | ✅ Complete | **Model: claude-sonnet-4-6.** Pure Claude reasoning. Receives `emphasis_points` from Orchestrator in the initial message. Produces cold email, brief, and 5 talking points. Prompt caching on system prompt. **4-iteration ceiling** (was 6). |
 
 ### API Routes
 | File | Status | Description |
@@ -70,7 +70,7 @@ PDX Hacks & AI Collective · Anthropic-sponsored hackathon · Spec: `SoloSail_Pr
 | **Orchestrator reads state after each dispatch** | After every agent call, `executeOrchestratorTool` reads `ResearchState` and returns a structured summary to Claude. This is what allows Claude to evaluate findings and adapt the research plan. |
 | **Contact Intel reads state first** | Agent is instructed to call `read_research_state` before fetching any pages. Reuses Operating Partners already found by Firm Profile Agent — avoids redundant team page fetches. |
 | **Emphasis points in initial message** | `runPitchGenerator` receives `emphasis_points` from the Orchestrator and embeds them directly in the `initialMessage`. Claude sees the Orchestrator's specific directions before reading the state. |
-| **Low iteration ceilings on pure reasoning agents** | Fit Scorer (5) and Pitch Generator (6) only need 2–3 tool calls. Low ceiling prevents runaway loops and reduces latency on the critical path. |
+| **Low iteration ceilings on pure reasoning agents** | Fit Scorer (3) and Pitch Generator (4) only need 2–3 tool calls. Low ceiling prevents runaway loops and reduces latency on the critical path. |
 | **Zero-signal landscape scan TypeScript guard** | If Deal Signal Agent returns no firms in Landscape Scan mode, TypeScript immediately calls `updateStatus("low_fit")` and sets `stopSignal.shouldStop = true`. Does not rely on Claude following a prompt instruction. |
 
 ---

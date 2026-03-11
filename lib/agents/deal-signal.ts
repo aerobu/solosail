@@ -178,6 +178,7 @@ export async function runDealSignalAgent(
     tools: [WEB_SEARCH_TOOL, FETCH_PAGE_TOOL, STORE_FINDING_TOOL],
     toolExecutor: createToolExecutor(sessionId),
     maxIterations: 8,
+    model: "claude-haiku-4-5-20251001",
   });
 
   const state = getState(sessionId);

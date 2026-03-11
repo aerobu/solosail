@@ -199,7 +199,7 @@ export async function runPitchGenerator(
     initialMessage,
     tools: [READ_RESEARCH_STATE_TOOL, STORE_FINDING_TOOL],
     toolExecutor: createToolExecutor(sessionId),
-    maxIterations: 6,
+    maxIterations: 4,
   });
 
   const state = getState(sessionId);

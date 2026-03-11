@@ -17,7 +17,7 @@ import type { AgentName } from "@/lib/types";
 
 const client = new Anthropic();
 
-const MODEL = "claude-sonnet-4-6";
+const DEFAULT_MODEL = "claude-sonnet-4-6";
 const DEFAULT_MAX_TOKENS = 4096;
 
 export type AgentToolExecutor = (
@@ -34,6 +34,7 @@ export interface AgentRunnerConfig {
   toolExecutor: AgentToolExecutor;
   maxIterations?: number;
   maxTokens?: number;
+  model?: string;
 }
 
 /**
@@ -50,6 +51,7 @@ export async function runAgentLoop({
   toolExecutor,
   maxIterations = 15,
   maxTokens = DEFAULT_MAX_TOKENS,
+  model = DEFAULT_MODEL,
 }: AgentRunnerConfig): Promise<void> {
   const messages: MessageParam[] = [
     { role: "user", content: initialMessage },
@@ -61,9 +63,9 @@ export async function runAgentLoop({
     iterations++;
 
     const response = await client.messages.create({
-      model: MODEL,
+      model,
       max_tokens: maxTokens,
-      system: systemPrompt,
+      system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       tools,
       messages,
     });

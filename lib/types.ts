@@ -21,6 +21,7 @@ export interface WebSearchResult {
 
 export interface FetchPageInput {
   url: string;
+  max_chars?: number; // default 10000; pass 24000 for firm-profile's long portfolio pages
 }
 
 export interface FetchPageResult {
