@@ -43,3 +43,6 @@ next-env.d.ts
 
 # scripts are dev tools only
 scripts/
+.env.local.swp
+*.swp
+*:Zone.Identifier

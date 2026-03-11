@@ -1,4 +1,3 @@
-import { EventEmitter } from "events";
 import { randomUUID } from "crypto";
 import type {
   ResearchState,
@@ -16,34 +15,36 @@ import type {
   StoreFindingInput,
   StoreFindingResult,
 } from "@/lib/types";
+import { logger } from "@/lib/logger";
 
 // ─────────────────────────────────────────────────────────────
-// In-memory store — Map from sessionId to ResearchState.
-// A parallel Map holds an EventEmitter per session so the SSE
-// route can subscribe to state changes without polling.
+// In-memory session store.
 //
-// Stored on globalThis rather than module scope so the Maps survive
+// Stored on globalThis rather than module scope so the Map survives
 // Next.js dev-mode per-route module re-compilation. In production
-// (next start) all routes share the same module cache and this makes
-// no difference; in dev each route gets a fresh module instance, so
-// a plain `const sessions = new Map()` would be empty in /api/stream
-// even though /api/run just wrote to its own copy.
+// (next start / Railway) all routes share the same module cache and this
+// makes no difference; in dev each route gets a fresh module instance, so
+// a plain `const sessions = new Map()` would be empty in /api/stream even
+// though /api/run just wrote to its own copy.
 // ─────────────────────────────────────────────────────────────
 
 declare global {
   // eslint-disable-next-line no-var
   var __solosail_sessions: Map<string, ResearchState> | undefined;
   // eslint-disable-next-line no-var
-  var __solosail_emitters: Map<string, EventEmitter> | undefined;
+  var __solosail_timers: Map<string, ReturnType<typeof setTimeout>> | undefined;
 }
 
 const sessions: Map<string, ResearchState> =
   globalThis.__solosail_sessions ??
   (globalThis.__solosail_sessions = new Map());
 
-const emitters: Map<string, EventEmitter> =
-  globalThis.__solosail_emitters ??
-  (globalThis.__solosail_emitters = new Map());
+// TTL timers stored separately so we can cancel them in destroySession.
+const timers: Map<string, ReturnType<typeof setTimeout>> =
+  globalThis.__solosail_timers ??
+  (globalThis.__solosail_timers = new Map());
+
+const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 // ─────────────────────────────────────────────────────────────
 // Internal helpers
@@ -55,19 +56,13 @@ function getStateOrThrow(sessionId: string): ResearchState {
   return state;
 }
 
-function emit(sessionId: string, event: string, data: unknown): void {
-  emitters.get(sessionId)?.emit(event, data);
-}
-
 // ─────────────────────────────────────────────────────────────
 // Session lifecycle
 // ─────────────────────────────────────────────────────────────
 
 /**
  * Creates a new research session. Returns the sessionId.
- * Called by POST /api/run immediately before kicking off the Orchestrator.
- * Optionally accepts an AgentConfig that re-frames all agent system prompts
- * for the user's specific consulting practice.
+ * Schedules automatic cleanup after SESSION_TTL_MS to prevent memory leaks.
  */
 export function createSession(
   brief: Omit<ResearchBrief, "created_at">,
@@ -82,34 +77,37 @@ export function createSession(
     status: "running",
   };
   sessions.set(session_id, state);
-  emitters.set(session_id, new EventEmitter());
+
+  // Auto-destroy after TTL. .unref() prevents the timer from keeping the
+  // Node.js process alive if the server is shutting down.
+  const timer = setTimeout(() => {
+    logger.info("Session TTL expired — destroying", { sessionId: session_id });
+    destroySession(session_id);
+  }, SESSION_TTL_MS);
+  if (typeof timer === "object" && "unref" in timer) timer.unref();
+  timers.set(session_id, timer);
+
   return session_id;
 }
 
 /**
  * Returns the full ResearchState for a session, or undefined if not found.
- * Used by the SSE route and agent executor to read current state.
  */
 export function getState(sessionId: string): ResearchState | undefined {
   return sessions.get(sessionId);
 }
 
 /**
- * Returns the EventEmitter for a session.
- * The SSE route subscribes to this emitter for "activity" and "status" events.
- */
-export function getEmitter(sessionId: string): EventEmitter | undefined {
-  return emitters.get(sessionId);
-}
-
-/**
- * Removes the session from memory and cleans up the EventEmitter.
- * Call after the SSE stream closes to prevent memory leaks in long-running servers.
+ * Removes the session and its TTL timer from memory.
+ * Called automatically after SESSION_TTL_MS; can also be called explicitly.
  */
 export function destroySession(sessionId: string): void {
-  emitters.get(sessionId)?.removeAllListeners();
+  const timer = timers.get(sessionId);
+  if (timer) {
+    clearTimeout(timer);
+    timers.delete(sessionId);
+  }
   sessions.delete(sessionId);
-  emitters.delete(sessionId);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -117,9 +115,7 @@ export function destroySession(sessionId: string): void {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Updates the session status. On terminal statuses (complete / low_fit / error),
- * stamps completed_at and emits a "status" event containing the full final state.
- * The SSE route listens for this to close the stream and push the IntelCard.
+ * Updates the session status. On terminal statuses stamps completed_at.
  */
 export function updateStatus(
   sessionId: string,
@@ -136,14 +132,12 @@ export function updateStatus(
     status === "complete" || status === "low_fit" || status === "error";
   if (isTerminal) {
     state.completed_at = new Date().toISOString();
+    logger.info("Session terminal", {
+      sessionId,
+      status,
+      ...(errorMessage ? { errorMessage } : {}),
+    });
   }
-
-  // Always emit status. Include full state snapshot on terminal so the SSE
-  // route can push the final IntelCard payload in a single event.
-  emit(sessionId, "status", {
-    status,
-    ...(isTerminal && { finalState: state }),
-  });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -151,9 +145,8 @@ export function updateStatus(
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Appends an ActivityLogEntry to the session and emits an "activity" event.
- * The SSE route forwards each entry to the browser as an SSE message,
- * producing the live agent feed the judges watch during the demo.
+ * Appends an ActivityLogEntry to the session.
+ * The SSE route forwards each entry to the browser via polling.
  */
 export function pushActivityLog(
   sessionId: string,
@@ -171,20 +164,15 @@ export function pushActivityLog(
     level,
   };
   state.activity_log.push(entry);
-  emit(sessionId, "activity", entry);
 }
 
 // ─────────────────────────────────────────────────────────────
 // Tool handlers
-// These functions are called by the agent executor after it
-// receives a tool_use block from Claude. The agent executor
-// maps tool name → handler, passes the sessionId + parsed input,
-// and returns a ToolResultBlockParam back to Claude.
 // ─────────────────────────────────────────────────────────────
 
 /**
  * Handles the store_finding tool call from any agent.
- * Writes structured data into the correct ResearchState slot based on finding_type.
+ * Writes structured data into the correct ResearchState slot.
  */
 export function handleStoreFinding(
   sessionId: string,
@@ -216,50 +204,45 @@ export function handleStoreFinding(
       break;
     case "activity_log":
     case "research_brief":
-      // These slots are managed outside the tool system — ignore writes.
+      // Managed outside the tool system — ignore writes.
       break;
   }
 
-  // Notify SSE listeners that a new finding arrived (useful for partial updates
-  // to the UI, e.g. showing the Firm Profile before the full run completes).
-  emit(sessionId, "finding", { finding_type });
   return { success: true };
 }
 
 /**
  * Handles the read_research_state tool call.
- * Returns the full ResearchState or a single named slot if filter is provided.
- * Called by the Orchestrator before each reasoning step and by the Fit Scorer
- * to get all accumulated intel before scoring.
+ * Accepts an optional filter string (a FindingType value from Claude).
+ * Invalid or unknown filter values return the full state.
  */
 export function handleReadResearchState(
   sessionId: string,
-  filter?: FindingType
+  filter?: string
 ): ResearchState | Partial<ResearchState> {
   const state = getStateOrThrow(sessionId);
   if (!filter) return state;
 
-  // Map each FindingType to its corresponding state slot.
   const slots: Partial<Record<FindingType, unknown>> = {
-    deal_signals: state.deal_signals,
-    firm_profile: state.firm_profile,
-    contacts: state.contacts,
-    fit_assessment: state.fit_assessment,
-    pitch_package: state.pitch_package,
+    deal_signals:     state.deal_signals,
+    firm_profile:     state.firm_profile,
+    contacts:         state.contacts,
+    fit_assessment:   state.fit_assessment,
+    pitch_package:    state.pitch_package,
     landscape_results: state.landscape_results,
-    activity_log: state.activity_log,
-    research_brief: state.research_brief,
+    activity_log:     state.activity_log,
+    research_brief:   state.research_brief,
   };
 
-  return { [filter]: slots[filter] } as Partial<ResearchState>;
+  // Guard: if filter isn't a valid FindingType key, return full state.
+  if (!(filter in slots)) return state;
+
+  return { [filter]: slots[filter as FindingType] } as Partial<ResearchState>;
 }
 
 /**
- * Replays a cached ResearchState into a live session, feeding activity log
- * entries one-by-one with a configurable delay to preserve the "live stream"
- * feel during a demo. After all entries are replayed, copies all finding
- * slots from the cached state and sets the terminal status so the SSE poller
- * closes the stream naturally — no frontend changes needed.
+ * Replays a cached ResearchState into a live session with a delay between
+ * entries to preserve the live-stream feel during a demo.
  */
 export async function replayCachedSession(
   sessionId: string,
@@ -271,7 +254,7 @@ export async function replayCachedSession(
   for (const entry of cachedState.activity_log) {
     pushActivityLog(sessionId, entry.agent, entry.message, entry.level);
     await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
-    if (!sessions.has(sessionId)) return; // session destroyed mid-replay
+    if (!sessions.has(sessionId)) return;
   }
 
   const s = sessions.get(sessionId);
@@ -289,7 +272,7 @@ export async function replayCachedSession(
 
 /**
  * Direct setter for LandscapeScanResult — used by the Orchestrator at the end
- * of a landscape scan run (it synthesizes the result itself rather than via tool call).
+ * of a landscape scan run.
  */
 export function setLandscapeResults(
   sessionId: string,
@@ -298,14 +281,10 @@ export function setLandscapeResults(
   const state = sessions.get(sessionId);
   if (!state) return;
   state.landscape_results = results;
-  emit(sessionId, "finding", { finding_type: "landscape_results" });
 }
 
 // ─────────────────────────────────────────────────────────────
 // Claude Tool Definitions
-// Export these as the JSON schema objects passed to the Anthropic
-// messages API in each agent's `tools` array. Each agent imports
-// only the tools it actually needs.
 // ─────────────────────────────────────────────────────────────
 
 export const STORE_FINDING_TOOL = {

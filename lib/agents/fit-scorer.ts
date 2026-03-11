@@ -105,13 +105,17 @@ function createToolExecutor(sessionId: string) {
     switch (toolName) {
       case "read_research_state": {
         const filter = input.filter as string | undefined;
-        const state = handleReadResearchState(sessionId, filter as never);
+        const state = handleReadResearchState(sessionId, filter);
         return JSON.stringify(state);
       }
 
       case "store_finding":
         return JSON.stringify(
-          handleStoreFinding(sessionId, input as unknown as StoreFindingInput)
+          handleStoreFinding(sessionId, {
+            agent_name: input.agent_name as string,
+            finding_type: input.finding_type as string,
+            data: input.data,
+          } as StoreFindingInput)
         );
 
       default:

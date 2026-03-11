@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { Radar, Search, LayoutGrid, ArrowRight, Loader2, SlidersHorizontal } from "lucide-react";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { IntelCard } from "@/components/IntelCard";
 import { OnboardingModal } from "@/components/OnboardingModal";
-import { loadProfile } from "@/lib/profile";
-import type { ActivityLogEntry, ResearchState, ServiceProfile } from "@/lib/types";
+import { useResearchRun } from "@/lib/hooks/useResearchRun";
+import { useServiceProfile } from "@/lib/hooks/useServiceProfile";
 import { cn } from "@/lib/utils";
 
 type Mode = "deep_dive" | "landscape_scan";
@@ -14,90 +14,22 @@ type Mode = "deep_dive" | "landscape_scan";
 const DEMO_CHIPS = ["Riverside Company", "Genstar Capital", "Accel-KKR"];
 
 export default function Dashboard() {
-  const [mode, setMode]               = useState<Mode>("deep_dive");
-  const [query, setQuery]             = useState("");
-  const [running, setRunning]         = useState(false);
-  const [log, setLog]                 = useState<ActivityLogEntry[]>([]);
-  const [finalState, setFinalState]   = useState<ResearchState | null>(null);
-  const [error, setError]             = useState<string | null>(null);
-  const [showModal, setShowModal]     = useState(false);
-  const [showEdit, setShowEdit]       = useState(false);
-  const [profile, setProfile]         = useState<ServiceProfile | null>(null);
-  const esRef                         = useRef<EventSource | null>(null);
+  const [mode, setMode]   = useState<Mode>("deep_dive");
+  const [query, setQuery] = useState("");
 
-  useEffect(() => () => { esRef.current?.close(); }, []);
-
-  // Check for first-visit on mount (client-side only)
-  useEffect(() => {
-    const p = loadProfile();
-    setProfile(p);
-    if (!p) setShowModal(true);
-  }, []);
-
-  async function startRun(runQuery: string, runMode: Mode = mode) {
-    if (!runQuery.trim() || running) return;
-
-    esRef.current?.close();
-    setRunning(true);
-    setLog([]);
-    setFinalState(null);
-    setError(null);
-
-    try {
-      const currentProfile = loadProfile();
-      const res = await fetch("/api/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: runMode,
-          query: runQuery.trim(),
-          ...(currentProfile ? { agent_config: currentProfile.structured_config } : {}),
-        }),
-      });
-
-      if (!res.ok) {
-        const { error: msg } = await res.json() as { error: string };
-        setError(msg ?? "Failed to start research run");
-        setRunning(false);
-        return;
-      }
-
-      const { session_id } = await res.json() as { session_id: string };
-      const es = new EventSource(`/api/stream/${session_id}`);
-      esRef.current = es;
-
-      es.addEventListener("activity", (e) => {
-        const entry = JSON.parse((e as MessageEvent).data) as ActivityLogEntry;
-        setLog((prev) => [...prev, entry]);
-      });
-
-      es.addEventListener("complete", (e) => {
-        const state = JSON.parse((e as MessageEvent).data) as ResearchState;
-        setFinalState(state);
-        setRunning(false);
-        es.close();
-      });
-
-      es.onerror = () => {
-        setError("Lost connection to the activity stream.");
-        setRunning(false);
-        es.close();
-      };
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-      setRunning(false);
-    }
-  }
+  const { running, log, finalState, error, startRun } = useResearchRun();
+  const { profile, showModal, showEdit, openEdit, onModalClose, onEditClose } =
+    useServiceProfile();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    startRun(query);
+    startRun(query, mode);
   }
 
-  function handleChipClick(chipQuery: string) {
+  function handleChipClick(chip: string) {
     setMode("deep_dive");
-    setQuery(chipQuery);
-    startRun(chipQuery, "deep_dive");
+    setQuery(chip);
+    startRun(chip, "deep_dive");
   }
 
   const placeholder =
@@ -113,25 +45,15 @@ export default function Dashboard() {
       {/* ── Header ─────────────────────────────────────────────── */}
       <header
         className="header-grid px-6 py-5 stagger-1"
-        style={{
-          backgroundColor: "var(--bg-surface)",
-          borderBottom: "1px solid var(--accent-blue)",
-        }}
+        style={{ backgroundColor: "var(--bg-surface)", borderBottom: "1px solid var(--accent-blue)" }}
       >
         <div className="max-w-screen-xl mx-auto flex items-center justify-between">
           <div>
             <div className="flex items-baseline gap-0.5">
-              <span className="font-serif text-2xl" style={{ color: "var(--text-primary)" }}>
-                SoloSail
-              </span>
-              <span className="font-serif text-2xl" style={{ color: "var(--accent-blue)" }}>
-                .ai
-              </span>
+              <span className="font-serif text-2xl" style={{ color: "var(--text-primary)" }}>SoloSail</span>
+              <span className="font-serif text-2xl" style={{ color: "var(--accent-blue)" }}>.ai</span>
             </div>
-            <div
-              className="font-mono text-xs mt-0.5 flex items-center"
-              style={{ color: "var(--text-muted)" }}
-            >
+            <div className="font-mono text-xs mt-0.5 flex items-center" style={{ color: "var(--text-muted)" }}>
               Procurement Intelligence
               <span className="animate-blink ml-0.5">_</span>
             </div>
@@ -140,20 +62,11 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => setShowEdit(true)}
+              onClick={openEdit}
               className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] px-2.5 py-1.5 rounded transition-colors"
-              style={{
-                color: "var(--text-muted)",
-                border: "1px solid var(--border)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = "var(--text-secondary)";
-                e.currentTarget.style.borderColor = "var(--border-bright)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = "var(--text-muted)";
-                e.currentTarget.style.borderColor = "var(--border)";
-              }}
+              style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-secondary)"; e.currentTarget.style.borderColor = "var(--border-bright)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)";     e.currentTarget.style.borderColor = "var(--border)"; }}
             >
               <SlidersHorizontal className="w-3 h-3" />
               {profile ? "Edit Profile" : "Set Up Profile"}
@@ -174,22 +87,11 @@ export default function Dashboard() {
 
       <main className="max-w-screen-xl mx-auto px-6 py-6">
 
-        {/* ── Input Form ────────────────────────────────────────── */}
-        <div
-          className="rounded-xl mb-6 stagger-2"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-          }}
-        >
+        {/* ── Input Form ─────────────────────────────────────────── */}
+        <div className="rounded-xl mb-6 stagger-2" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}>
           <div className="p-6">
             <form onSubmit={handleSubmit}>
-
-              {/* Mode toggle — borderless tabs */}
-              <div
-                className="flex gap-6 mb-5"
-                style={{ borderBottom: "1px solid var(--border)" }}
-              >
+              <div className="flex gap-6 mb-5" style={{ borderBottom: "1px solid var(--border)" }}>
                 {(["deep_dive", "landscape_scan"] as const).map((m) => (
                   <button
                     key={m}
@@ -201,16 +103,11 @@ export default function Dashboard() {
                     <span className="flex items-center gap-1.5">
                       {m === "deep_dive"
                         ? <><Search className="w-3 h-3" /> Deep Dive</>
-                        : <><LayoutGrid className="w-3 h-3" /> Landscape Scan</>
-                      }
+                        : <><LayoutGrid className="w-3 h-3" /> Landscape Scan</>}
                     </span>
-                    {/* Sliding underline */}
                     <span
                       className="absolute bottom-0 left-0 right-0 h-0.5 transition-transform duration-200 origin-left"
-                      style={{
-                        backgroundColor: "var(--accent-blue)",
-                        transform: mode === m ? "scaleX(1)" : "scaleX(0)",
-                      }}
+                      style={{ backgroundColor: "var(--accent-blue)", transform: mode === m ? "scaleX(1)" : "scaleX(0)" }}
                     />
                   </button>
                 ))}
@@ -222,7 +119,6 @@ export default function Dashboard() {
                   : "Scan for 5–8 PE firms matching your criteria."}
               </p>
 
-              {/* Query input + submit */}
               <div className="flex gap-3">
                 <input
                   type="text"
@@ -231,22 +127,16 @@ export default function Dashboard() {
                   placeholder={placeholder}
                   disabled={running}
                   className="flex-1 px-4 py-3 rounded-lg text-base font-sans transition-colors disabled:opacity-50 outline-none"
-                  style={{
-                    backgroundColor: "var(--bg-elevated)",
-                    border: "1px solid var(--border)",
-                    color: "var(--text-primary)",
-                  }}
+                  style={{ backgroundColor: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                   onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-bright)"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                  onBlur={(e)  => { e.currentTarget.style.borderColor = "var(--border)"; }}
                 />
                 <button
                   type="submit"
                   disabled={running || !query.trim()}
                   className={cn(
                     "flex items-center gap-2 px-6 py-3 rounded-lg font-mono text-sm font-medium whitespace-nowrap transition-all",
-                    running || !query.trim()
-                      ? "cursor-not-allowed"
-                      : "active:scale-[0.98]"
+                    running || !query.trim() ? "cursor-not-allowed" : "active:scale-[0.98]"
                   )}
                   style={
                     running || !query.trim()
@@ -254,11 +144,9 @@ export default function Dashboard() {
                       : { backgroundColor: "var(--accent-blue)", color: "#fff" }
                   }
                 >
-                  {running ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Researching…</>
-                  ) : (
-                    <><ArrowRight className="w-4 h-4" /> Run Research</>
-                  )}
+                  {running
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Researching…</>
+                    : <><ArrowRight className="w-4 h-4" /> Run Research</>}
                 </button>
               </div>
             </form>
@@ -266,11 +154,7 @@ export default function Dashboard() {
             {error && (
               <div
                 className="mt-4 font-mono text-xs px-4 py-3 rounded-lg"
-                style={{
-                  backgroundColor: "rgba(239,68,68,0.08)",
-                  border: "1px solid rgba(239,68,68,0.3)",
-                  color: "var(--accent-red)",
-                }}
+                style={{ backgroundColor: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", color: "var(--accent-red)" }}
               >
                 {error}
               </div>
@@ -278,24 +162,14 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── Two-column layout ─────────────────────────────────── */}
+        {/* ── Two-column layout ──────────────────────────────────── */}
         {hasActivity ? (
           <div className="flex gap-6 items-start stagger-3">
 
             {/* Left — Activity Feed */}
             <div className="w-[400px] flex-shrink-0 sticky top-6">
-              <div
-                className="rounded-xl overflow-hidden"
-                style={{
-                  backgroundColor: "var(--bg-surface)",
-                  border: "1px solid var(--border)",
-                }}
-              >
-                {/* Panel header */}
-                <div
-                  className="px-4 py-3 flex items-center justify-between"
-                  style={{ borderBottom: "1px solid var(--border)" }}
-                >
+              <div className="rounded-xl overflow-hidden" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+                <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
                   <div className="flex items-center gap-2.5">
                     {running && (
                       <span className="relative flex h-2 w-2">
@@ -303,10 +177,7 @@ export default function Dashboard() {
                         <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: "var(--accent-green)" }} />
                       </span>
                     )}
-                    <span
-                      className="font-mono text-xs font-medium uppercase tracking-[0.12em]"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
+                    <span className="font-mono text-xs font-medium uppercase tracking-[0.12em]" style={{ color: "var(--text-secondary)" }}>
                       Research Activity
                     </span>
                   </div>
@@ -314,7 +185,6 @@ export default function Dashboard() {
                     {log.length} event{log.length !== 1 ? "s" : ""}
                   </span>
                 </div>
-
                 <div className="p-3 max-h-[calc(100vh-220px)] overflow-y-auto dark-scrollbar">
                   <ActivityFeed entries={log} running={running} />
                 </div>
@@ -326,17 +196,11 @@ export default function Dashboard() {
               {finalState ? (
                 <IntelCard state={finalState} />
               ) : (
-                <div
-                  className="rounded-xl p-8"
-                  style={{
-                    backgroundColor: "var(--bg-surface)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
+                <div className="rounded-xl p-8" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}>
                   <div className="animate-pulse space-y-4">
                     <div className="h-12 rounded-lg w-2/3" style={{ backgroundColor: "var(--bg-elevated)" }} />
-                    <div className="h-4 rounded w-1/4" style={{ backgroundColor: "var(--bg-elevated)" }} />
-                    <div className="h-4 rounded w-1/3" style={{ backgroundColor: "var(--bg-elevated)" }} />
+                    <div className="h-4 rounded w-1/4"   style={{ backgroundColor: "var(--bg-elevated)" }} />
+                    <div className="h-4 rounded w-1/3"   style={{ backgroundColor: "var(--bg-elevated)" }} />
                     <div className="pt-4 space-y-3" style={{ borderTop: "1px solid var(--border)" }}>
                       <div className="h-3 rounded w-full" style={{ backgroundColor: "var(--bg-elevated)" }} />
                       <div className="h-3 rounded w-5/6" style={{ backgroundColor: "var(--bg-elevated)" }} />
@@ -353,21 +217,10 @@ export default function Dashboard() {
           </div>
 
         ) : (
-          /* ── Empty state ────────────────────────────────────── */
-          <div
-            className="rounded-xl p-14 text-center stagger-3"
-            style={{
-              backgroundColor: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <Radar
-              className="w-12 h-12 mx-auto mb-5 opacity-50"
-              style={{ color: "var(--accent-blue)" }}
-            />
-            <h3 className="font-serif text-3xl mb-3" style={{ color: "var(--text-primary)" }}>
-              Start your research
-            </h3>
+          /* ── Empty state ─────────────────────────────────────── */
+          <div className="rounded-xl p-14 text-center stagger-3" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+            <Radar className="w-12 h-12 mx-auto mb-5 opacity-50" style={{ color: "var(--accent-blue)" }} />
+            <h3 className="font-serif text-3xl mb-3" style={{ color: "var(--text-primary)" }}>Start your research</h3>
             <p className="font-mono text-sm max-w-sm mx-auto mb-8" style={{ color: "var(--text-muted)" }}>
               Deep Dive into a specific firm or run a Landscape Scan to find new targets.
             </p>
@@ -378,19 +231,9 @@ export default function Dashboard() {
                   type="button"
                   onClick={() => handleChipClick(chip)}
                   className="font-mono text-xs px-4 py-2 rounded-lg transition-all"
-                  style={{
-                    backgroundColor: "var(--bg-elevated)",
-                    border: "1px solid var(--border)",
-                    color: "var(--text-secondary)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "var(--border-bright)";
-                    e.currentTarget.style.color = "var(--text-primary)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "var(--border)";
-                    e.currentTarget.style.color = "var(--text-secondary)";
-                  }}
+                  style={{ backgroundColor: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--border-bright)"; e.currentTarget.style.color = "var(--text-primary)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)";        e.currentTarget.style.color = "var(--text-secondary)"; }}
                 >
                   {chip}
                 </button>
@@ -400,24 +243,8 @@ export default function Dashboard() {
         )}
       </main>
 
-      {/* First-visit onboarding modal */}
-      <OnboardingModal
-        open={showModal}
-        onClose={() => {
-          setShowModal(false);
-          setProfile(loadProfile());
-        }}
-      />
-
-      {/* Edit Profile modal */}
-      <OnboardingModal
-        open={showEdit}
-        onClose={() => {
-          setShowEdit(false);
-          setProfile(loadProfile());
-        }}
-        prefill={profile}
-      />
+      <OnboardingModal open={showModal} onClose={onModalClose} />
+      <OnboardingModal open={showEdit}  onClose={onEditClose} prefill={profile} />
     </div>
   );
 }

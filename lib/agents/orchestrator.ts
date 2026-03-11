@@ -1,11 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { getSystemPrompt } from "./base";
-import type {
-  MessageParam,
-  ToolResultBlockParam,
-  ToolUseBlock,
-} from "@anthropic-ai/sdk/resources/messages/messages";
-
+import { runAgentLoop } from "./_runner";
 import {
   getState,
   pushActivityLog,
@@ -16,18 +10,13 @@ import {
   READ_RESEARCH_STATE_TOOL,
 } from "@/lib/tools/research-state";
 import { handleWebSearch, WEB_SEARCH_TOOL } from "@/lib/tools/web-search";
+import { logger } from "@/lib/logger";
 import { runDealSignalAgent } from "./deal-signal";
 import { runFirmProfileAgent } from "./firm-profile";
 import { runContactIntelAgent } from "./contact-intel";
 import { runFitScorer } from "./fit-scorer";
 import { runPitchGenerator } from "./pitch-generator";
 import type { ResearchBrief, StoreFindingInput } from "@/lib/types";
-
-// ─────────────────────────────────────────────────────────────
-// Anthropic client — singleton
-// ─────────────────────────────────────────────────────────────
-
-const client = new Anthropic();
 
 const MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 4096;
@@ -108,8 +97,9 @@ Given a user query (a specific PE firm name for Deep Dive mode, or search criter
 - **read_research_state:** Read all accumulated research before any decision point. Always call this after an agent completes.
 - **store_finding:** Write your own structured outputs to the research state.
 - **run_deal_signal_agent:** Dispatches the Deal Signal Agent to scan for PE firms with recent procurement-relevant activity. Primary use: Landscape Scan mode. In Deep Dive mode, use only if you need to quickly confirm a firm's recent deal activity before committing to full research.
-- **run_firm_profile_agent:** Dispatches the Firm Profile Agent to build a full structured profile for a named PE firm. Always run in Deep Dive mode.
-- **run_contact_intel_agent:** Dispatches the Contact Intelligence Agent to find the right person to pitch. Run after the firm profile is complete.
+- **run_firm_profile_and_contact_intel:** Dispatches Firm Profile + Contact Intel concurrently for a named firm. **Use this instead of calling them separately in Deep Dive mode** — it is faster and deterministically parallel.
+- **run_firm_profile_agent:** Dispatches the Firm Profile Agent alone (use only when you need just the profile without contacts).
+- **run_contact_intel_agent:** Dispatches the Contact Intelligence Agent alone (use only when contacts are needed without a fresh profile).
 - **run_fit_scorer:** Dispatches the Fit Scoring Agent to produce a scored fit assessment. Run after firm_profile and contacts are populated.
 - **run_pitch_generator:** Dispatches the Pitch Generation Agent to produce the cold email, brief, and talking points. Only call if fit is High or Medium. You MUST provide specific emphasis_points — see instructions below.
 - **mark_low_fit:** Call this when you determine fit is definitively Low. Provide a clear reason. This ends the research run.
@@ -118,7 +108,7 @@ Given a user query (a specific PE firm name for Deep Dive mode, or search criter
 
 ### Deep Dive Mode (specific firm named):
 1. Optionally do one quick web_search to orient yourself if the firm is unfamiliar
-2. PARALLEL DISPATCH — call run_firm_profile_agent AND run_contact_intel_agent in a SINGLE turn by emitting both tool_use blocks at once. Do NOT split them into two separate turns. They execute in parallel threads and will both complete before you receive any results.
+2. Call run_firm_profile_and_contact_intel — this runs both agents in parallel and returns a combined summary in one step.
 3. After both return: read_research_state. Evaluate sector focus and contacts.
    - If clearly LOW FIT (pure software, no industrial exposure): call mark_low_fit immediately
 4. Dispatch run_fit_scorer
@@ -309,6 +299,26 @@ const MARK_LOW_FIT_TOOL = {
   },
 };
 
+// Compound tool: runs Firm Profile + Contact Intel in parallel (deterministic,
+// faster than relying on Claude to emit both tool_use blocks in a single turn).
+const RUN_FIRM_PROFILE_AND_CONTACT_INTEL_TOOL = {
+  name: "run_firm_profile_and_contact_intel",
+  description:
+    "Dispatches the Firm Profile Agent and Contact Intelligence Agent concurrently " +
+    "for the same PE firm. Prefer this over calling them separately in Deep Dive mode — " +
+    "it saves wall-clock time by running both in parallel and returns a combined summary.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      firm_name: {
+        type: "string",
+        description: "The exact name of the PE firm. Example: 'Riverside Company'",
+      },
+    },
+    required: ["firm_name"],
+  },
+};
+
 // All tools available to the Orchestrator
 const ORCHESTRATOR_TOOLS = [
   WEB_SEARCH_TOOL,
@@ -317,6 +327,7 @@ const ORCHESTRATOR_TOOLS = [
   RUN_DEAL_SIGNAL_AGENT_TOOL,
   RUN_FIRM_PROFILE_AGENT_TOOL,
   RUN_CONTACT_INTEL_AGENT_TOOL,
+  RUN_FIRM_PROFILE_AND_CONTACT_INTEL_TOOL,
   RUN_FIT_SCORER_TOOL,
   RUN_PITCH_GENERATOR_TOOL,
   MARK_LOW_FIT_TOOL,
@@ -369,15 +380,16 @@ async function executeOrchestratorTool(
 
     case "read_research_state": {
       const filter = input.filter as string | undefined;
-      const state = handleReadResearchState(sessionId, filter as never);
+      const state = handleReadResearchState(sessionId, filter);
       return JSON.stringify(state);
     }
 
     case "store_finding": {
-      const result = handleStoreFinding(
-        sessionId,
-        input as unknown as StoreFindingInput
-      );
+      const result = handleStoreFinding(sessionId, {
+        agent_name: input.agent_name as string,
+        finding_type: input.finding_type as string,
+        data: input.data,
+      } as StoreFindingInput);
       return JSON.stringify(result);
     }
 
@@ -563,6 +575,47 @@ async function executeOrchestratorTool(
       });
     }
 
+    case "run_firm_profile_and_contact_intel": {
+      const firmName = input.firm_name as string;
+      pushActivityLog(
+        sessionId,
+        "orchestrator",
+        `Deploying Firm Profile + Contact Intel in parallel for ${firmName}`,
+        "info"
+      );
+      await Promise.all([
+        runFirmProfileAgent(sessionId, firmName),
+        runContactIntelAgent(sessionId, firmName),
+      ]);
+
+      const state = getState(sessionId);
+      const profile = state?.firm_profile;
+      const contacts = state?.contacts;
+      return JSON.stringify({
+        result: "Firm Profile and Contact Intel completed in parallel.",
+        firm_profile: profile
+          ? {
+              firm_name: profile.firm_name,
+              fund_size: profile.fund_size ?? "unknown",
+              sector_focus: profile.sector_focus,
+              recent_portfolio_count: profile.recent_portfolio.length,
+              operating_partners_found: profile.operating_partners.length,
+            }
+          : null,
+        contacts: contacts?.contacts?.length
+          ? {
+              contacts_found: contacts.contacts.length,
+              top_contact: {
+                name: contacts.contacts[0].name,
+                title: contacts.contacts[0].title,
+                type: contacts.contacts[0].contact_type,
+                background_summary: contacts.contacts[0].background_summary,
+              },
+            }
+          : { contacts_found: 0 },
+      });
+    }
+
     case "mark_low_fit": {
       const reason = input.reason as string;
       pushActivityLog(
@@ -588,7 +641,7 @@ async function executeOrchestratorTool(
 // ─────────────────────────────────────────────────────────────
 // runOrchestrator — the main entry point
 // Called by POST /api/run as a fire-and-forget async function.
-// All results flow through ResearchState → EventEmitter → SSE.
+// All results flow through ResearchState → SSE polling.
 // ─────────────────────────────────────────────────────────────
 
 export async function runOrchestrator(sessionId: string): Promise<void> {
@@ -600,168 +653,43 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
   pushActivityLog(
     sessionId,
     "orchestrator",
-    `Research run started — ${research_brief.mode === "deep_dive"
-      ? `Deep Dive: ${research_brief.target_firm_name}`
-      : `Landscape Scan: ${research_brief.landscape_criteria}`
+    `Research run started — ${
+      research_brief.mode === "deep_dive"
+        ? `Deep Dive: ${research_brief.target_firm_name}`
+        : `Landscape Scan: ${research_brief.landscape_criteria}`
     }`,
     "info"
   );
 
-  const messages: MessageParam[] = [
-    {
-      role: "user",
-      content: buildInitialPrompt(research_brief),
-    },
-  ];
-
   const resolvedPrompt = getSystemPrompt(SYSTEM_PROMPT, state.agent_config);
-
-  // Shared mutable stop signal. Tool handlers set shouldStop = true
-  // to break the loop (e.g., after mark_low_fit).
   const stopSignal = { shouldStop: false };
 
-  let iterations = 0;
-
   try {
-    while (iterations < MAX_ITERATIONS) {
-      iterations++;
+    const exitReason = await runAgentLoop({
+      sessionId,
+      agentName: "orchestrator",
+      systemPrompt: resolvedPrompt,
+      initialMessage: buildInitialPrompt(research_brief),
+      tools: ORCHESTRATOR_TOOLS,
+      toolExecutor: (toolName, input) =>
+        executeOrchestratorTool(sessionId, toolName, input, stopSignal),
+      maxIterations: MAX_ITERATIONS,
+      maxTokens: MAX_TOKENS,
+      model: MODEL,
+      parallel: true,
+      stopSignal,
+    });
 
-      const response = await client.messages.create({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        system: [{ type: "text", text: resolvedPrompt, cache_control: { type: "ephemeral" } }],
-        tools: ORCHESTRATOR_TOOLS,
-        messages,
-      });
-
-      // Append the full assistant turn to history for the next iteration
-      messages.push({ role: "assistant", content: response.content });
-
-      // Log any text blocks — this IS the live reasoning feed for the demo.
-      // Keep individual entries concise; truncate at 600 chars to stay readable.
-      for (const block of response.content) {
-        if (block.type === "text" && block.text.trim()) {
-          const text = block.text.trim();
-          pushActivityLog(
-            sessionId,
-            "orchestrator",
-            text.length > 600 ? text.slice(0, 597) + "…" : text,
-            "info"
-          );
-        }
-      }
-
-      // ── Terminal: model finished naturally ──────────────────
-      if (response.stop_reason === "end_turn") {
-        // Only call updateStatus if we haven't already stopped via mark_low_fit
-        if (!stopSignal.shouldStop) {
-          updateStatus(sessionId, "complete");
-        }
-        break;
-      }
-
-      // ── Tool use: execute every tool in this turn ────────────
-      if (response.stop_reason === "tool_use") {
-        const toolBlocks = response.content.filter(
-          (b): b is ToolUseBlock => b.type === "tool_use"
-        );
-
-        // Execute all tools in this turn in parallel so that
-        // run_firm_profile_agent and run_contact_intel_agent run concurrently
-        // when Claude emits both in a single turn (as instructed in the system prompt).
-        const toolResults: ToolResultBlockParam[] = await Promise.all(
-          toolBlocks.map(async (block) => {
-            let resultContent: string;
-            let isError = false;
-
-            try {
-              resultContent = await executeOrchestratorTool(
-                sessionId,
-                block.name,
-                block.input as Record<string, unknown>,
-                stopSignal
-              );
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
-              resultContent = JSON.stringify({ error: message });
-              isError = true;
-              pushActivityLog(
-                sessionId,
-                "orchestrator",
-                `Tool error (${block.name}): ${message}`,
-                "error"
-              );
-            }
-
-            return {
-              type: "tool_result" as const,
-              tool_use_id: block.id,
-              content: resultContent,
-              is_error: isError,
-            };
-          })
-        );
-
-        // If a tool (e.g., mark_low_fit) signalled stop, we still need to
-        // send the tool results back to Claude for a clean final turn,
-        // then break immediately after.
-        messages.push({ role: "user", content: toolResults });
-
-        if (stopSignal.shouldStop) {
-          // Give Claude one final turn to acknowledge, but don't loop further
-          const finalResponse = await client.messages.create({
-            model: MODEL,
-            max_tokens: 256,
-            system: [{ type: "text", text: resolvedPrompt, cache_control: { type: "ephemeral" } }],
-            tools: ORCHESTRATOR_TOOLS,
-            messages,
-          });
-          // Log any final text
-          for (const block of finalResponse.content) {
-            if (block.type === "text" && block.text.trim()) {
-              pushActivityLog(
-                sessionId,
-                "orchestrator",
-                block.text.trim().slice(0, 600),
-                "info"
-              );
-            }
-          }
-          break;
-        }
-      }
-
-      // ── Safety: max_tokens hit — continue loop ───────────────
-      if (response.stop_reason === "max_tokens") {
-        pushActivityLog(
-          sessionId,
-          "orchestrator",
-          "Response truncated — continuing...",
-          "warning"
-        );
-        // Continue the loop; the model will pick up from its last position
-        continue;
-      }
-    }
-
-    // Iteration ceiling hit
-    if (iterations >= MAX_ITERATIONS && !stopSignal.shouldStop) {
-      pushActivityLog(
-        sessionId,
-        "orchestrator",
-        `Research run reached max iterations (${MAX_ITERATIONS}). Finalizing with available data.`,
-        "warning"
-      );
+    // Mark complete unless mark_low_fit already set terminal status.
+    if (exitReason !== "stop_signal" && !stopSignal.shouldStop) {
       updateStatus(sessionId, "complete");
     }
+
+    logger.info("Orchestrator finished", { sessionId, exitReason });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    pushActivityLog(
-      sessionId,
-      "orchestrator",
-      `Orchestrator error: ${message}`,
-      "error"
-    );
+    pushActivityLog(sessionId, "orchestrator", `Orchestrator error: ${message}`, "error");
+    logger.error("Orchestrator crashed", { sessionId, error: message });
     updateStatus(sessionId, "error", message);
   }
 }

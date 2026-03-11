@@ -1,15 +1,15 @@
 import { readdirSync, readFileSync, existsSync } from "fs";
 import { join } from "path";
 import type { ResearchState } from "@/lib/types";
+import { logger } from "@/lib/logger";
 
 const CACHE_DIR = join(process.cwd(), "lib", "demo-cache");
 
-/**
- * Normalizes a string for cache key comparison.
- * Lowercases, strips punctuation, and collapses whitespace.
- * "Riverside Company", "riverside company", and "Riverside" all normalize
- * to forms that match "riverside-company.json".
- */
+interface CacheEntry {
+  key: string;
+  state: ResearchState;
+}
+
 function normalize(s: string): string {
   return s
     .toLowerCase()
@@ -22,52 +22,48 @@ function filenameToKey(filename: string): string {
   return filename.replace(/\.json$/, "").replace(/-/g, " ");
 }
 
+// ── Load cache at module initialization time ────────────────────────────────
+// Previously this used readdirSync + readFileSync inside findCachedState(),
+// which blocked the Node.js event loop on every incoming request. Loading once
+// at startup is free and safe — the cache files never change at runtime.
+const CACHE: CacheEntry[] = [];
+
+if (existsSync(CACHE_DIR)) {
+  try {
+    const files = readdirSync(CACHE_DIR).filter((f) => f.endsWith(".json"));
+    for (const file of files) {
+      try {
+        const raw = readFileSync(join(CACHE_DIR, file), "utf-8");
+        const state = JSON.parse(raw) as ResearchState;
+        CACHE.push({ key: normalize(filenameToKey(file)), state });
+      } catch (err) {
+        logger.warn("Failed to load cache file", { file, error: String(err) });
+      }
+    }
+    if (CACHE.length > 0) {
+      logger.info(`Demo cache loaded`, { entries: CACHE.length });
+    }
+  } catch (err) {
+    logger.warn("Demo cache directory unreadable", { error: String(err) });
+  }
+}
+
 /**
- * Looks up a cached ResearchState for the given query.
+ * Looks up a pre-cached ResearchState for the given query.
  * Matching priority:
  *   1. Exact normalized match       "riverside company" → "riverside-company.json" ✓
  *   2. Cache key starts with query  "riverside" → "riverside company"              ✓
  *   3. Query starts with cache key  "riverside company inc" → "riverside company"  ✓
  *
- * Returns the parsed ResearchState, or null if no cache file matches.
+ * Returns the cached ResearchState, or null if no match.
  */
 export function findCachedState(query: string): ResearchState | null {
-  if (!existsSync(CACHE_DIR)) return null;
-
-  let files: string[];
-  try {
-    files = readdirSync(CACHE_DIR).filter((f) => f.endsWith(".json"));
-  } catch {
-    return null;
-  }
-  if (files.length === 0) return null;
-
-  const normalizedQuery = normalize(query);
-
-  const entries = files.map((f) => ({
-    file: f,
-    key: normalize(filenameToKey(f)),
-  }));
-
-  // 1. Exact match
-  let match = entries.find((e) => e.key === normalizedQuery);
-
-  // 2. Cache key starts with query ("riverside" → "riverside company")
-  if (!match) {
-    match = entries.find((e) => e.key.startsWith(normalizedQuery));
-  }
-
-  // 3. Query starts with cache key ("riverside company inc" → "riverside company")
-  if (!match) {
-    match = entries.find((e) => normalizedQuery.startsWith(e.key));
-  }
-
-  if (!match) return null;
-
-  try {
-    const raw = readFileSync(join(CACHE_DIR, match.file), "utf-8");
-    return JSON.parse(raw) as ResearchState;
-  } catch {
-    return null;
-  }
+  if (CACHE.length === 0) return null;
+  const q = normalize(query);
+  return (
+    CACHE.find((e) => e.key === q)?.state ??
+    CACHE.find((e) => e.key.startsWith(q))?.state ??
+    CACHE.find((e) => q.startsWith(e.key))?.state ??
+    null
+  );
 }
